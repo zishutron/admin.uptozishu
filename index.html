@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#0b1020">
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="stylesheet" href="/assets/admin.css?v=1">
-<script>(function(){try{var t=localStorage.getItem('za_theme');if(t==='light')document.documentElement.setAttribute('data-theme','light');}catch(e){}})();</script>
+<script>(function(){var m=matchMedia('(prefers-color-scheme: light)');function ap(){var t=null;try{t=localStorage.getItem('za_theme')}catch(e){}if(t!=='light'&&t!=='dark')t=m.matches?'light':'dark';document.documentElement.setAttribute('data-theme',t);var c=document.querySelector('meta[name=theme-color]');if(c)c.content=t==='light'?'#f3f5fb':'#0b1020';window.__zaApply=ap}ap();(m.addEventListener?m.addEventListener('change',function(){ap();if(window.__zaIcon)window.__zaIcon()}):m.addListener(function(){ap();if(window.__zaIcon)window.__zaIcon()}))})();</script>
 </head>
 <body>
 <div id="splash" class="splash"><div class="splash-mark"><i></i><i></i><i></i></div></div>
@@ -18,7 +18,7 @@
   <div class="auth-art" aria-hidden="true">
     <div class="orb o1"></div><div class="orb o2"></div>
     <div class="auth-art-in">
-      <div class="logo big"><svg viewBox="0 0 24 24"><path d="M12 2 3 6v6c0 5.2 3.6 9.3 9 10 5.4-.7 9-4.8 9-10V6l-9-4Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+      <img class="brand-img big" src="/favicon.png" width="64" height="64" alt="">
       <h1>UptoZishu<br><span>Admin</span></h1>
       <p>One place to run the store: apps, reviews, reports, claims and developers.</p>
       <ul><li>Live store overview</li><li>Moderation in one tap</li><li>Claims &amp; ownership transfer</li></ul>
@@ -48,7 +48,7 @@
 <!-- APP -->
 <div id="appView" class="shell" hidden>
   <aside class="side" id="side">
-    <div class="side-brand"><div class="logo"><svg viewBox="0 0 24 24"><path d="M12 2 3 6v6c0 5.2 3.6 9.3 9 10 5.4-.7 9-4.8 9-10V6l-9-4Z"/><path d="m9 12 2 2 4-4"/></svg></div><div><b>UptoZishu</b><small>Admin</small></div></div>
+    <div class="side-brand"><img class="brand-img" src="/favicon.png" width="38" height="38" alt=""><div><b>Upto<span class="zb">Zishu</span></b><small>Admin</small></div></div>
     <nav id="nav"></nav>
     <div class="side-foot">
       <div class="me"><div class="avatar" id="meAv">A</div><div class="me-t"><b id="meName">Admin</b><small id="meMail"></small></div></div>
