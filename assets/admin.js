@@ -324,7 +324,7 @@ function bindView() {
   const s = $('#appSort'); if (s) s.onchange = e => { UI.appSort = e.target.value; rerender(); };
   const bt = $('#bcText'); if (bt) bt.addEventListener('input', () => { $('#bcLen').textContent = bt.value.length + ' / 280'; $('#bcPrev').textContent = bt.value || 'Your message appears here…'; });
 }
-window.addEventListener('hashchange', () => { closeOv(); $('#side').classList.remove('open'); $('#scrim').classList.remove('on'); rerender(); window.scrollTo(0, 0); });
+window.addEventListener('hashchange', () => { closeOv(); navOpen(false); rerender(); window.scrollTo(0, 0); });
 
 /* ---------- command palette ---------- */
 function openPalette() {
@@ -350,8 +350,9 @@ document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.ke
 $('#cmdBtn').onclick = openPalette;
 
 /* ---------- shell controls ---------- */
-$('#burger').onclick = () => { $('#side').classList.add('open'); $('#scrim').classList.add('on'); };
-$('#scrim').onclick = () => { $('#side').classList.remove('open'); $('#scrim').classList.remove('on'); };
+const navOpen = o => { $('#side').classList.toggle('open', o); $('#scrim').classList.toggle('on', o); document.body.classList.toggle('nav-open', o); };
+$('#burger').onclick = () => navOpen(true);
+$('#scrim').onclick = () => navOpen(false);
 $('#logoutBtn').onclick = () => auth.signOut();
 $('#deniedOut').onclick = () => auth.signOut();
 const themeIcon = () => { $('#themeBtn').innerHTML = ico(document.documentElement.getAttribute('data-theme') === 'light' ? 'sun' : 'moon'); }; window.__zaIcon = themeIcon; themeIcon();
