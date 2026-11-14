@@ -19,6 +19,7 @@ const I = {
   inbox: '<path d="M3 13l3-8h12l3 8v6H3zM3 13h5l1 3h6l1-3h5"/>', sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M2 12h2M20 12h2M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/>',
   moon: '<path d="M21 12.800A9 9 0 1 1 11.200 3a7 7 0 0 0 9.800 9.800Z"/>', send: '<path d="m22 2-11 11M22 2l-7 20-4-9-9-4Z"/>', plus: '<path d="M12 5v14M5 12h14"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', eyeoff: '<path d="M3 3l18 18M10.600 6.100A10 10 0 0 1 12 5c6.400 0 10 7 10 7a17 17 0 0 1-3.200 4M6.600 6.600A17 17 0 0 0 2 12s3.600 7 10 7c1.600 0 3-.4 4.300-1M9.900 9.900a3 3 0 0 0 4.200 4.200"/>'
 };
+const avc = s => { let h = 0; s = String(s || 'G').toLowerCase(); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997; return 'c' + (h % 8); };
 const ico = n => '<svg viewBox="0 0 24 24">' + (I[n] || '') + '</svg>';
 const NAV = [
   ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Moderation'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'],
@@ -281,7 +282,7 @@ function vUsers() {
   return `<div class="toolbar"><div class="grow">${ico('search')}<input id="userQ" type="search" placeholder="Search name, username, email, uid…" value="${esc(UI.userQ)}"></div></div>
   <div class="chips" style="margin-bottom:16px">${[['all', 'Everyone'], ['dev', 'Developers'], ['rev', 'Reviewers']].map(([k, t]) => `<button class="chip ${UI.userF === k ? 'on' : ''}" data-act="userF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
   <div class="table" style="--cols:minmax(0,2fr) minmax(0,1.4fr) 100px 90px 110px"><div class="tr-h"><div>Person</div><div>Email</div><div>Role</div><div>Reviews</div><div>Joined</div></div>
-  ${shown.length ? shown.map(u => `<div class="tr-r" style="cursor:default"><div class="cell who"><div class="avatar" style="width:36px;height:36px;border-radius:11px">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) : pill('', 'User')}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
+  ${shown.length ? shown.map(u => `<div class="tr-r" style="cursor:default"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) : pill('', 'User')}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
   <div class="card" style="margin-top:16px"><h3>Add another admin</h3><div class="sub">Open Firebase → Realtime Database → add <code>admins</code> → <code>&lt;uid&gt;</code> = <code>true</code>. Removing it removes admin access immediately.</div></div>`;
 }
 ACT.userF = d => { UI.userF = d.k; rerender(); };
@@ -353,7 +354,8 @@ $('#burger').onclick = () => { $('#side').classList.add('open'); $('#scrim').cla
 $('#scrim').onclick = () => { $('#side').classList.remove('open'); $('#scrim').classList.remove('on'); };
 $('#logoutBtn').onclick = () => auth.signOut();
 $('#deniedOut').onclick = () => auth.signOut();
-$('#themeBtn').onclick = () => { const l = document.documentElement.getAttribute('data-theme') === 'light'; if (l) document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', 'light'); try { localStorage.setItem('za_theme', l ? 'dark' : 'light'); } catch (e) { } $('#themeBtn').innerHTML = ico(l ? 'moon' : 'sun'); };
+const themeIcon = () => { $('#themeBtn').innerHTML = ico(document.documentElement.getAttribute('data-theme') === 'light' ? 'sun' : 'moon'); }; window.__zaIcon = themeIcon; themeIcon();
+$('#themeBtn').onclick = () => { const l = document.documentElement.getAttribute('data-theme') === 'light'; try { localStorage.setItem('za_theme', l ? 'dark' : 'light'); } catch (e) { } if (window.__zaApply) window.__zaApply(); else document.documentElement.setAttribute('data-theme', l ? 'dark' : 'light'); themeIcon(); };
 $('#refreshBtn').onclick = async () => { const b = $('#refreshBtn'); b.style.opacity = .5; await loadAll(); b.style.opacity = 1; rerender(); toast('Data refreshed'); };
 
 /* ---------- auth ---------- */
@@ -368,8 +370,7 @@ auth.onAuthStateChanged(async user => {
   try { ok = (await db.ref('admins/' + user.uid).once('value')).val() === true; } catch (e) { ok = false; }
   if (!ok) { S.user = null; show('auth'); $('#loginForm').hidden = true; $('#denied').hidden = false; $('#deniedUid').textContent = user.uid; return; }
   S.user = user; show('app');
-  $('#meName').textContent = user.displayName || 'Admin'; $('#meMail').textContent = user.email || ''; $('#meAv').textContent = ((user.displayName || user.email || 'A')[0] || 'A').toUpperCase();
-  if (document.documentElement.getAttribute('data-theme') === 'light') $('#themeBtn').innerHTML = ico('sun');
+  $('#meName').textContent = user.displayName || 'Admin'; $('#meMail').textContent = user.email || ''; $('#meAv').textContent = ((user.displayName || user.email || 'A')[0] || 'A').toUpperCase(); $('#meAv').className = 'avatar ' + avc(user.displayName || user.email);
   $('#view').innerHTML = '<div class="grid g-kpi"><div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>';
   await loadAll(); rerender();
   db.ref('claims').on('value', s => { S.claims = s.val() || {}; if (S.loaded) { buildNav(); if (['claims', ''].includes(route()) && !document.activeElement.matches('input,textarea,select')) rerender(); } }, () => { });

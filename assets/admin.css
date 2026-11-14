@@ -190,3 +190,10 @@ a.kpi{color:inherit;display:block;transition:.15s}a.kpi:hover{border-color:var(-
   .toasts{left:16px;right:16px;bottom:16px}.toast{max-width:none}
   .overlay.top{padding-top:8vh}
 }
+
+.brand-img{width:38px;height:38px;border-radius:11px;flex-shrink:0;display:block}.brand-img.big{width:64px;height:64px;border-radius:18px;margin-bottom:26px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.side-brand b .zb{color:var(--acc)}
+.avatar{background:linear-gradient(180deg,#c9b5ac,#9b8378)}
+.avatar.c0{background:linear-gradient(180deg,#c9b5ac,#9b8378)}.avatar.c1{background:linear-gradient(180deg,#c9aec4,#9d7b97)}.avatar.c2{background:linear-gradient(180deg,#b3c7ae,#7f9a7b)}.avatar.c3{background:linear-gradient(180deg,#a9bccd,#7a8fa3)}
+.avatar.c4{background:linear-gradient(180deg,#d0bfa4,#a89473)}.avatar.c5{background:linear-gradient(180deg,#bcaecc,#8f81a6)}.avatar.c6{background:linear-gradient(180deg,#cfabab,#a67d7d)}.avatar.c7{background:linear-gradient(180deg,#a6c8c5,#729c99)}
+.avatar{font-weight:600}
