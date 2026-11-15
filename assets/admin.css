@@ -199,3 +199,8 @@ a.kpi{color:inherit;display:block;transition:.15s}a.kpi:hover{border-color:var(-
 .avatar{font-weight:600}
 
 body.nav-open{overflow:hidden;touch-action:none}body.nav-open .side{touch-action:pan-y}#nav{overscroll-behavior:contain;min-height:0}.side-foot{flex-shrink:0}
+
+.shots{display:flex;gap:10px;overflow-x:auto;padding:8px 0 12px;margin-bottom:4px}
+.shots a{position:relative;flex:0 0 auto;display:block}
+.shots img{height:170px;width:auto;border-radius:12px;border:1px solid var(--line2);display:block;background:var(--bg2)}
+.shots span{position:absolute;left:6px;top:6px;min-width:22px;height:22px;border-radius:11px;background:rgba(0,0,0,.65);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;padding:0 6px}
