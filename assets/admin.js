@@ -26,7 +26,7 @@ const NAV = [
   ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega']
 ];
 const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', reports: 'Reports', claims: 'Claim requests', users: 'Users & developers', broadcast: 'Broadcast' };
-const S = { user: null, apps: {}, users: {}, devs: {}, reports: {}, claims: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, reviews: {}, stats: {}, failed: [], loaded: false };
 const UI = { appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
@@ -70,7 +70,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('reviews', 'reviews'), get('stats', 'stats')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -122,6 +122,11 @@ const ACT = {
     const r = (S.reviews[d.a] || {})[d.r]; if (!r) return;
     if (!(await ask({ title: 'Delete this review?', text: '"' + String(r.text || '').slice(0, 120) + '"\n\nThis cannot be undone.', ok: 'Delete', danger: true }))) return;
     try { await db.ref(`reviews/${d.a}/${d.r}`).remove(); delete S.reviews[d.a][d.r]; await recount(d.a); toast('Review deleted'); rerender(); } catch (e) { fail(e); }
+  },
+  async verifyDev(d) {
+    const p = S.profiles[d.u]; if (!p) return; const on = p.verified !== true;
+    if (!(await ask({ title: (on ? 'Verify ' : 'Remove verified badge from ') + (p.name || 'this developer') + '?', text: on ? 'A Verified badge shows on their store developer page.' : '', ok: on ? 'Verify' : 'Remove', danger: !on }))) return;
+    try { await db.ref(`devprofiles/${d.u}/verified`).set(on ? true : null); if (on) p.verified = true; else delete p.verified; toast(on ? 'Developer verified' : 'Badge removed'); rerender(); } catch (e) { fail(e); }
   },
   async resolve(d) { try { await db.ref('reports/' + d.id).remove(); delete S.reports[d.id]; toast('Report resolved'); rerender(); } catch (e) { fail(e); } },
   async approve(d) {
@@ -282,8 +287,8 @@ function vUsers() {
   const shown = list.slice(0, 80);
   return `<div class="toolbar"><div class="grow">${ico('search')}<input id="userQ" type="search" placeholder="Search name, username, email, uid…" value="${esc(UI.userQ)}"></div></div>
   <div class="chips" style="margin-bottom:16px">${[['all', 'Everyone'], ['dev', 'Developers'], ['rev', 'Reviewers']].map(([k, t]) => `<button class="chip ${UI.userF === k ? 'on' : ''}" data-act="userF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
-  <div class="table" style="--cols:minmax(0,2fr) minmax(0,1.4fr) 100px 90px 110px"><div class="tr-h"><div>Person</div><div>Email</div><div>Role</div><div>Reviews</div><div>Joined</div></div>
-  ${shown.length ? shown.map(u => `<div class="tr-r" style="cursor:default"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) : pill('', 'User')}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
+  <div class="table" style="--cols:minmax(0,2fr) minmax(0,1.4fr) 100px 90px 110px"><div class="tr-h"><div>Person</div><div>Email</div><div>Role</div><div>Reviews</div><div>Joined · Verify</div></div>
+  ${shown.length ? shown.map(u => `<div class="tr-r" style="cursor:default"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) + ((S.profiles[u.uid] || {}).verified ? ' ' + pill('ok', 'Verified') : '') : pill('', 'User')}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${u.isDev && S.profiles[u.uid] ? `<button class="btn sm ${S.profiles[u.uid].verified ? '' : 'good'}" data-act="verifyDev" data-u="${esc(u.uid)}">${S.profiles[u.uid].verified ? 'Unverify' : 'Verify'}</button>` : dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
   <div class="card" style="margin-top:16px"><h3>Add another admin</h3><div class="sub">Open Firebase → Realtime Database → add <code>admins</code> → <code>&lt;uid&gt;</code> = <code>true</code>. Removing it removes admin access immediately.</div></div>`;
 }
 ACT.userF = d => { UI.userF = d.k; rerender(); };
