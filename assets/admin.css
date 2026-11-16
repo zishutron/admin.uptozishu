@@ -214,3 +214,25 @@ a.tk-row{display:block;color:inherit;text-decoration:none;transition:border-colo
 .tkm.dv .tkb{background:var(--bg2);border:1px solid var(--line);border-bottom-left-radius:5px}
 .tkm.adm .tkb{background:var(--grad);color:#fff;border-bottom-right-radius:5px}
 @media(max-width:640px){.tkm{max-width:96%}}
+
+/* sent animation */
+.sent-anim{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;background:rgba(5,8,20,.55);backdrop-filter:blur(4px);animation:saFade .25s ease both}
+.sent-anim.out{opacity:0;transition:opacity .35s}
+.sa-card{background:var(--panel);border:1px solid var(--line2);border-radius:24px;padding:30px 40px 26px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.45);animation:saPop .45s cubic-bezier(.2,1.3,.4,1) both;display:grid;gap:6px;min-width:260px}
+.sa-card b{font-size:18px;margin-top:8px;animation:saUp .4s .6s both}.sa-card small{color:var(--mut);animation:saUp .4s .7s both}
+.sa-stage{position:relative;width:84px;height:84px;margin:0 auto}
+.sa-plane{position:absolute;inset:14px;width:56px;height:56px;color:var(--acc);animation:saFly .75s ease-in forwards}
+.sa-check{position:absolute;inset:0;width:84px;height:84px;color:var(--ok);fill:none;stroke:currentColor;stroke-width:3.5;stroke-linecap:round;stroke-linejoin:round;transform:scale(.6);opacity:0;animation:saIn .35s .5s cubic-bezier(.2,1.5,.4,1) forwards}
+.sa-check circle{stroke-dasharray:151;stroke-dashoffset:151;animation:saDraw .5s .55s ease forwards}
+.sa-check path{stroke-dasharray:40;stroke-dashoffset:40;animation:saDraw .35s .85s ease forwards}
+.sa-stage i{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:50%;background:var(--c);opacity:0;animation:saBurst .7s ease-out forwards}
+.tkm.pop{animation:saBub .45s cubic-bezier(.2,1.2,.4,1) both}
+@keyframes saFade{from{opacity:0}}
+@keyframes saPop{from{transform:scale(.8) translateY(14px);opacity:0}}
+@keyframes saFly{0%{transform:translate(-30px,26px) rotate(-8deg);opacity:0}25%{opacity:1}100%{transform:translate(70px,-60px) rotate(12deg);opacity:0}}
+@keyframes saIn{to{transform:scale(1);opacity:1}}
+@keyframes saDraw{to{stroke-dashoffset:0}}
+@keyframes saUp{from{transform:translateY(8px);opacity:0}}
+@keyframes saBurst{0%{transform:translate(-50%,-50%) scale(.2);opacity:1}100%{transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) scale(1);opacity:0}}
+@keyframes saBub{from{transform:translateY(14px) scale(.96);opacity:0}}
+@media(prefers-reduced-motion:reduce){.sent-anim *,.tkm.pop{animation-duration:.01s!important;animation-delay:0s!important}}

@@ -320,6 +320,13 @@ async function tkMail(type, ticketId) {
     return true;
   } catch (e) { return false; }
 }
+function sentAnim(msg, sub) {
+  const o = document.createElement('div'); o.className = 'sent-anim';
+  const dots = Array.from({ length: 14 }, (_, i) => { const a = (i / 14) * Math.PI * 2, d = 70 + (i % 3) * 18; return `<i style="--x:${Math.round(Math.cos(a) * d)}px;--y:${Math.round(Math.sin(a) * d)}px;--c:${['#7c8cff', '#a78bfa', '#34d399', '#fbbf24', '#f472b6'][i % 5]};animation-delay:${.55 + (i % 4) * .04}s"></i>`; }).join('');
+  o.innerHTML = `<div class="sa-card"><div class="sa-stage"><svg class="sa-plane" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg><svg class="sa-check" viewBox="0 0 52 52"><circle cx="26" cy="26" r="24"/><path d="M15 27l8 8 15-17"/></svg>${dots}</div><b>${esc(msg)}</b><small>${esc(sub)}</small></div>`;
+  document.body.appendChild(o);
+  setTimeout(() => o.classList.add('out'), 1700); setTimeout(() => o.remove(), 2100);
+}
 const TKC = { account: 'Account and login', app: 'App upload or listing', review: 'Reviews and ratings', claim: 'Claim request', bug: 'Bug or technical problem', other: 'Something else' };
 const tkList = () => Object.keys(S.tickets || {}).map(id => ({ id, ...S.tickets[id] })).filter(t => t && typeof t === 'object' && t.subject);
 const tkMsgs = t => Object.keys(t.messages || {}).map(k => ({ id: k, ...t.messages[k] })).sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -367,7 +374,9 @@ async function tkWrite(id, status, extra, text, note) {
 ACT.tkSend = async d => {
   const el = $('#tkText'), text = el.value.trim(); if (text.length < 2) { el.style.borderColor = 'var(--bad)'; return; }
   const t = S.tickets[d.id];
-  try { await tkWrite(d.id, 'answered', true, text, 'Support replied to your ticket: ' + t.subject); UI.reply[d.id] = ''; const mailed = await tkMail('reply', d.id); toast(MAIL_ENDPOINT ? (mailed ? 'Reply sent — notification and email sent' : 'Reply sent — notification sent (email failed)') : 'Reply sent — developer notified'); rerender(); } catch (e) { fail(e); }
+  try { await tkWrite(d.id, 'answered', true, text, 'Support replied to your ticket: ' + t.subject); UI.reply[d.id] = ''; rerender(); const lastB = document.querySelector('.tkt .tkm:last-child'); if (lastB) lastB.classList.add('pop');
+    sentAnim('Reply sent', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
+    if (MAIL_ENDPOINT) { const mailed = await tkMail('reply', d.id); if (!mailed) toast('Email could not be sent, notification was delivered', 'bad'); } } catch (e) { fail(e); }
 };
 ACT.tkClose = async d => {
   if (!(await ask({ title: 'Close this ticket?', text: 'The developer is notified and can reopen it by replying.', ok: 'Close ticket' }))) return;
