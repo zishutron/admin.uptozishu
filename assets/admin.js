@@ -22,11 +22,11 @@ const I = {
 const avc = s => { let h = 0; s = String(s || 'G').toLowerCase(); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997; return 'c' + (h % 8); };
 const ico = n => '<svg viewBox="0 0 24 24">' + (I[n] || '') + '</svg>';
 const NAV = [
-  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Moderation'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
+  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
   ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega']
 ];
-const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast' };
-const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast' };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, reviews: {}, stats: {}, failed: [], loaded: false };
 const UI = { tkTab: 'wait', reply: {}, appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
@@ -37,9 +37,9 @@ function appCreated(a) { const v = a.timestamp || a.createdAt || a.uploadDate; i
 const dstr = t => t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 function ago(t) { if (!t) return ''; const s = Math.max(1, (Date.now() - t) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; if (s < 2592000) return Math.floor(s / 86400) + 'd ago'; return dstr(t); }
 const ICON = 'https://img.icons8.com/color/144/android-os.png';
-const stat = a => a.status === 'suspended' ? 'suspended' : a.status === 'draft' ? 'draft' : 'live';
+const stat = a => ['suspended', 'draft', 'pending', 'rejected'].includes(a.status) ? a.status : 'live';
 const pill = (k, t) => `<span class="pill ${k}">${esc(t)}</span>`;
-const statPill = a => { const s = stat(a); return pill(s === 'live' ? 'ok' : s === 'draft' ? '' : 'bad', s === 'live' ? 'Live' : s === 'draft' ? 'Draft' : 'Suspended'); };
+const statPill = a => { const s = stat(a); return pill(s === 'live' ? 'ok' : s === 'draft' ? '' : s === 'pending' ? 'warn' : 'bad', { live: 'Live', draft: 'Draft', pending: 'In review', rejected: 'Rejected', suspended: 'Suspended' }[s]); };
 const stars = r => { r = Math.round(+r || 0); return '<span class="stars">' + '★'.repeat(r) + '<span style="opacity:.3">' + '★'.repeat(5 - r) + '</span></span>'; };
 const ckey = s => String(s || '').replace(/[^A-Za-z0-9_-]/g, '_');
 const appList = () => Object.keys(S.apps).map(id => ({ id, ...S.apps[id] }));
@@ -70,7 +70,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -210,7 +210,7 @@ function vApps() {
   const shown = list.slice(0, UI.appLimit);
   return `<div class="toolbar"><div class="grow">${ico('search')}<input id="appQ" type="search" placeholder="Search name, package, developer…" value="${esc(UI.appQ)}"></div>
     <select id="appSort"><option value="new"${UI.appSort === 'new' ? ' selected' : ''}>Newest</option><option value="dl"${UI.appSort === 'dl' ? ' selected' : ''}>Most downloads</option><option value="rate"${UI.appSort === 'rate' ? ' selected' : ''}>Top rated</option><option value="name"${UI.appSort === 'name' ? ' selected' : ''}>Name A–Z</option></select></div>
-  <div class="chips" style="margin-bottom:16px">${[['all', 'All'], ['live', 'Live'], ['draft', 'Draft'], ['suspended', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.appF === k ? 'on' : ''}" data-act="appF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
+  <div class="chips" style="margin-bottom:16px">${[['all', 'All'], ['live', 'Live'], ['pending', 'In review'], ['rejected', 'Rejected'], ['draft', 'Draft'], ['suspended', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.appF === k ? 'on' : ''}" data-act="appF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
   <div class="table" style="--cols:minmax(0,2.4fr) minmax(0,1.3fr) 110px 90px 90px 110px"><div class="tr-h"><div>App</div><div>Developer</div><div>Status</div><div>Downloads</div><div>Rating</div><div class="cell r">Actions</div></div>
   ${shown.length ? shown.map(a => `<div class="tr-r" data-act="openApp" data-id="${esc(a.id)}"><div class="cell who"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div><b>${esc(a.name || 'Untitled')}</b><small>${esc(a.package || '')}</small></div></div><div class="cell hide-m"><span>${esc(a.developerName || userName(a.developerUid) || '—')}</span></div><div class="cell">${statPill(a)}</div><div class="cell hide-m">${nf(a.downloadCount)}</div><div class="cell hide-m">${+a.rating ? (+a.rating).toFixed(1) + ' ★' : '—'}</div><div class="cell r hide-m">${stat(a) === 'suspended' ? `<button class="btn sm good" data-act="restore" data-id="${esc(a.id)}">Restore</button>` : `<button class="btn sm danger" data-act="suspend" data-id="${esc(a.id)}">Suspend</button>`}</div></div>`).join('') : `<div class="empty">${ico('inbox')}<b>No apps found</b>Try another search or filter.</div>`}</div>
   ${list.length > shown.length ? `<div class="more"><button class="btn" data-act="more" data-k="apps">Show more (${list.length - shown.length})</button></div>` : ''}`;
@@ -228,7 +228,7 @@ function openApp(id) {
   <div class="dr-sec"><h4>Developer</h4><dl class="kv">${kv('Name', esc(a.developerName || userName(a.developerUid)))}${kv('Uid', '<code>' + esc(a.developerUid || '') + '</code>')}${kv('Website', a.website ? `<a href="${esc(a.website)}" target="_blank" rel="noopener">${esc(a.website)}</a>` : '')}${kv('Support', esc(a.supportEmail))}</dl></div>
   ${a.shortDescription ? `<div class="dr-sec"><h4>Description</h4><p>${esc(a.shortDescription)}</p></div>` : ''}
   <div class="dr-sec"><h4>Latest reviews</h4>${revs.length ? revs.map(r => `<div class="reply" style="border-color:${r.hidden ? 'var(--warn)' : 'var(--acc)'}"><b>${esc(r.author || 'User')}</b> ${stars(r.rating)}${r.hidden ? ' ' + pill('warn', 'Hidden') : ''}<div>${esc(String(r.text || '').slice(0, 220))}</div></div>`).join('') : '<div class="muted">No reviews</div>'}</div></div>
-  <div class="dr-f">${stat(a) === 'suspended' ? `<button class="btn good" data-act="restore" data-id="${esc(id)}">${ico('play')}Restore</button>` : `<button class="btn danger" data-act="suspend" data-id="${esc(id)}">${ico('pause')}Suspend</button>`}<button class="btn" data-act="transfer" data-id="${esc(id)}">${ico('swap')}Transfer</button><button class="btn danger" data-act="del" data-id="${esc(id)}" style="margin-left:auto">${ico('trash')}Delete</button></div></aside>`;
+  <div class="dr-f">${stat(a) === 'pending' ? `<button class="btn good" data-act="apApprove" data-id="${esc(id)}">${ico('check')}Approve</button><button class="btn danger" data-act="apReject" data-id="${esc(id)}">${ico('x')}Reject</button>` : ''}${stat(a) === 'suspended' ? `<button class="btn good" data-act="restore" data-id="${esc(id)}">${ico('play')}Restore</button>` : `<button class="btn danger" data-act="suspend" data-id="${esc(id)}">${ico('pause')}Suspend</button>`}<button class="btn" data-act="transfer" data-id="${esc(id)}">${ico('swap')}Transfer</button><button class="btn danger" data-act="del" data-id="${esc(id)}" style="margin-left:auto">${ico('trash')}Delete</button></div></aside>`;
   $('#drClose').onclick = closeOv; document.onkeydown = e => { if (e.key === 'Escape') closeOv(); };
 }
 
@@ -312,11 +312,12 @@ ACT.sendBc = async () => {
 /* ---------- support tickets ---------- */
 // Paste your Google Apps Script web-app URL here to email developers when you reply (see mail-script/README.txt)
 const MAIL_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxnsa5QzCWtto5671_JcJlefPOV9YcGlZUHMW9CrH1VuG0Qa8cNe94RLYpkFMC7G6Ga4g/exec';
-async function tkMail(type, ticketId) {
+async function tkMail(type, ticketId) { return mailCall(type, ticketId); }
+async function mailCall(type, ticketId) {
   if (!MAIL_ENDPOINT) return false;
   try {
     const token = await auth.currentUser.getIdToken();
-    await Promise.race([fetch(MAIL_ENDPOINT, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ type, ticketId, token }) }), new Promise(r => setTimeout(r, 6000))]);
+    await Promise.race([fetch(MAIL_ENDPOINT, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ type, ticketId, appId: ticketId, token }) }), new Promise(r => setTimeout(r, 6000))]);
     return true;
   } catch (e) { return false; }
 }
@@ -385,12 +386,92 @@ ACT.tkClose = async d => {
 ACT.tkReopen = async d => { try { await tkWrite(d.id, 'open', false, '', ''); toast('Ticket reopened'); rerender(); } catch (e) { fail(e); } };
 setInterval(() => { if (S.user && S.loaded && !document.hidden && route() === 'tickets' && !(document.activeElement && document.activeElement.id === 'tkText')) db.ref('tickets').once('value').then(x => { S.tickets = x.val() || {}; rerender(); }).catch(() => {}); }, 60000);
 
+
+/* ---------- approvals (apps + profile changes) ---------- */
+const pendingApps = () => appList().filter(a => a.status === 'pending').sort((a, b) => (+a.submittedAt || +a.timestamp || 0) - (+b.submittedAt || +b.timestamp || 0));
+const pendingProfiles = () => Object.keys(S.pend || {}).map(uid => ({ uid, ...S.pend[uid] })).filter(p => p && typeof p === 'object' && p.status === 'pending').sort((a, b) => (+a.submittedAt || 0) - (+b.submittedAt || 0));
+const PF_LABEL = { name: 'Name', tagline: 'Tagline', type: 'Type', about: 'About', location: 'Location', founded: 'Started', email: 'Contact email', website: 'Website', github: 'GitHub', twitter: 'X', instagram: 'Instagram', youtube: 'YouTube', telegram: 'Telegram', linkedin: 'LinkedIn', discord: 'Discord', logo: 'Logo', cover: 'Cover' };
+UI.apTab = 'apps';
+function vApprovals() {
+  const pa = pendingApps(), pp = pendingProfiles();
+  const tabs = `<div class="chips" style="margin-bottom:16px"><button class="chip ${UI.apTab === 'apps' ? 'on' : ''}" data-act="apTab" data-t="apps">Apps · ${pa.length}</button><button class="chip ${UI.apTab === 'profiles' ? 'on' : ''}" data-act="apTab" data-t="profiles">Profile changes · ${pp.length}</button></div>`;
+  if (UI.apTab === 'apps') {
+    if (!pa.length) return tabs + `<div class="empty card">${ico('check')}<b>No apps waiting</b>Apps that developers submit for review show up here.</div>`;
+    return tabs + '<div class="stack">' + pa.map(a => {
+      const shots = String(a.screenshot || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x)).slice(0, 4);
+      return `<div class="item"><div class="item-h"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><b>${esc(a.name || 'Untitled')} <span class="muted" style="font-weight:500">${esc(a.version || '')}</span></b><div class="meta">${esc(a.developerName || userName(a.developerUid) || 'Developer')} · ${esc(a.category || '')} · submitted ${ago(+a.submittedAt || +a.timestamp)}</div></div>${pill('warn', 'In review')}</div>
+      ${a.shortDescription ? `<p class="body">${esc(a.shortDescription)}</p>` : ''}
+      <dl class="kv"><div><dt>Package</dt><dd>${esc(a.package || '—')}</dd></div><div><dt>Download link</dt><dd>${a.downloadUrl ? `<a href="${esc(a.downloadUrl)}" target="_blank" rel="noopener">${esc(hostOf(a.downloadUrl) || 'open')}</a>` : '—'}</dd></div><div><dt>Size</dt><dd>${esc(a.size || '—')}</dd></div><div><dt>Permissions</dt><dd>${esc(String(a.permissions || '').split(',').filter(Boolean).length)} declared</dd></div></dl>
+      ${shots.length ? `<div class="shots">${shots.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : ''}
+      <div class="actions"><button class="btn sm" data-act="openApp" data-id="${esc(a.id)}">Full details</button><button class="btn sm good" data-act="apApprove" data-id="${esc(a.id)}">${ico('check')}Approve</button><button class="btn sm danger" data-act="apReject" data-id="${esc(a.id)}">${ico('x')}Reject</button></div></div>`;
+    }).join('') + '</div>';
+  }
+  if (!pp.length) return tabs + `<div class="empty card">${ico('check')}<b>No profile changes waiting</b>Edits to developer profiles show up here for approval.</div>`;
+  return tabs + '<div class="stack">' + pp.map(p => {
+    const cur = S.profiles[p.uid] || {};
+    const rows = Object.keys(PF_LABEL).filter(k => String(p[k] || '') !== String(cur[k] || '')).map(k => {
+      const img = k === 'logo' || k === 'cover', f = v => v ? (img ? `<a href="${esc(v)}" target="_blank" rel="noopener"><img src="${esc(v)}" alt="" style="max-height:54px;border-radius:8px;vertical-align:middle"></a>` : esc(String(v).slice(0, 220))) : '<span class="muted">empty</span>';
+      return `<tr><td class="muted">${PF_LABEL[k]}</td><td>${f(cur[k])}</td><td><b>${f(p[k])}</b></td></tr>`;
+    }).join('');
+    return `<div class="item"><div class="item-h"><div class="avatar ${avc(p.name)}" style="width:40px;height:40px;border-radius:50%">${esc((p.name || '?')[0].toUpperCase())}</div><div class="grow"><b>${esc(p.name || 'Developer')}</b><div class="meta">@${esc(p.username || '')} · submitted ${ago(+p.submittedAt)}${cur.name ? '' : ' · first public profile'}</div></div>${pill('warn', 'Awaiting approval')}</div>
+    <div style="overflow-x:auto"><table class="difft"><thead><tr><th></th><th>Live now</th><th>Requested</th></tr></thead><tbody>${rows || '<tr><td colspan="3" class="muted">No visible differences</td></tr>'}</tbody></table></div>
+    <div class="actions"><button class="btn sm good" data-act="pfApprove" data-id="${esc(p.uid)}">${ico('check')}Approve and publish</button><button class="btn sm danger" data-act="pfReject" data-id="${esc(p.uid)}">${ico('x')}Reject</button></div></div>`;
+  }).join('') + '</div>';
+}
+ACT.apTab = d => { UI.apTab = d.t; rerender(); };
+async function decideApp(id, ok) {
+  const a = S.apps[id]; if (!a) return;
+  let reason = '';
+  if (!ok) {
+    reason = await ask({ title: 'Reject this app?', text: 'The developer is notified and emailed with your reason, and can fix the app and submit it again.', input: 'Reason shown to the developer', area: true, required: true, ok: 'Reject app' });
+    if (!reason) return;
+  } else if (!(await ask({ title: 'Approve and publish?', text: `"${a.name}" goes live on the store after the next store update. The developer is notified and emailed.`, ok: 'Approve' }))) return;
+  const now = Date.now(), up = {};
+  up[`apps/${id}/status`] = ok ? 'live' : 'rejected'; up[`apps/${id}/reviewedAt`] = now; up[`apps/${id}/rejectReason`] = ok ? null : reason.slice(0, 400);
+  if (ok) { up[`apps/${id}/approved`] = true; up[`apps/${id}/updatedDate`] = new Date().toISOString().split('T')[0]; }
+  if (a.developerUid) up[`notifications/${a.developerUid}/ar_${id.slice(-8)}_${now}`] = { type: 'appreview', appId: id, appName: String(a.name || '').slice(0, 100), text: ok ? `Good news! Your app "${a.name}" was approved and is now live on UptoZishu.` : `Your app "${a.name}" was not approved. Please fix the issue and submit it again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
+  try {
+    await db.ref().update(up);
+    a.status = ok ? 'live' : 'rejected'; a.reviewedAt = now; a.rejectReason = ok ? null : reason; if (ok) a.approved = true;
+    closeOv(); rerender();
+    sentAnim(ok ? 'App approved' : 'App rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
+    if (MAIL_ENDPOINT) { const m = await mailCall('appdecision', id); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
+  } catch (e) { fail(e); }
+}
+ACT.apApprove = d => decideApp(d.id, true);
+ACT.apReject = d => decideApp(d.id, false);
+ACT.pfApprove = async d => {
+  const uid = d.id, p = S.pend[uid]; if (!p) return;
+  if (!(await ask({ title: 'Approve profile changes?', text: 'The new profile goes live on the developer page after the next store update. The developer gets a notification.', ok: 'Approve and publish' }))) return;
+  const now = Date.now(), up = {}, nv = v => (v === undefined || v === '' ? null : v);
+  Object.keys(PF_LABEL).concat(['username', 'createdAt']).forEach(k => { up[`devprofiles/${uid}/${k}`] = nv(p[k]); });
+  up[`devprofiles/${uid}/updatedAt`] = now; up[`devprofilePending/${uid}`] = null;
+  up[`developers/${uid}/displayName`] = p.name || null; up[`developers/${uid}/bio`] = p.about || null; up[`developers/${uid}/supportEmail`] = p.email || null; up[`developers/${uid}/website`] = p.website || null; up[`developers/${uid}/github`] = p.github || null; up[`developers/${uid}/country`] = p.location || null;
+  if (p.logo) up[`developers/${uid}/photoURL`] = p.logo;
+  appList().forEach(a => { if (a.developerUid === uid && p.name && a.developerName !== p.name) up[`apps/${a.id}/developerName`] = p.name; });
+  up[`notifications/${uid}/pf_${now}`] = { type: 'profile', text: 'Your profile changes were approved and are now live on your developer page.', timestamp: now, read: false };
+  try {
+    await db.ref().update(up);
+    S.profiles[uid] = Object.assign({}, S.profiles[uid] || {}, p, { updatedAt: now }); delete S.profiles[uid].status; delete S.profiles[uid].submittedAt; delete S.profiles[uid].rejectReason;
+    delete S.pend[uid]; appList().forEach(a => { if (a.developerUid === uid && p.name) S.apps[a.id].developerName = p.name; });
+    rerender(); sentAnim('Profile approved', 'Developer notified in the console');
+  } catch (e) { fail(e); }
+};
+ACT.pfReject = async d => {
+  const uid = d.id, p = S.pend[uid]; if (!p) return;
+  const reason = await ask({ title: 'Reject profile changes?', text: 'The live profile stays as it is. The developer gets a notification with your reason.', input: 'Reason shown to the developer', area: true, required: true, ok: 'Reject changes' });
+  if (!reason) return;
+  const now = Date.now(), up = {};
+  up[`devprofilePending/${uid}/status`] = 'rejected'; up[`devprofilePending/${uid}/rejectReason`] = reason.slice(0, 400);
+  up[`notifications/${uid}/pf_${now}`] = { type: 'profile', text: 'Your profile changes were not approved. Please update them and submit again.', reason: reason.slice(0, 400), timestamp: now, read: false };
+  try { await db.ref().update(up); p.status = 'rejected'; p.rejectReason = reason; rerender(); toast('Rejected, developer notified'); } catch (e) { fail(e); }
+};
 /* ---------- router ---------- */
-const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, tickets: vTickets, users: vUsers, broadcast: vBroadcast };
+const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast };
 function route() { return (location.hash.replace(/^#\/?/, '').split('/')[0]) || ''; }
 function routeId() { return decodeURIComponent(location.hash.replace(/^#\/?/, '').split('/')[1] || ''); }
 function buildNav() {
-  const c = { reports: reportList().length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
+  const c = { approvals: pendingApps().length + pendingProfiles().length, reports: reportList().length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
   $('#nav').innerHTML = NAV.map(n => n[0] === 'h' ? `<div class="nav-h">${n[1]}</div>` : `<a class="nav-a ${route() === n[0] ? 'on' : ''}" href="#/${n[0]}">${ico(n[2])}<span>${n[1]}</span>${c[n[0]] ? `<span class="cnt">${c[n[0]]}</span>` : ''}</a>`).join('');
 }
 function rerender() {
