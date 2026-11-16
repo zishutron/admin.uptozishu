@@ -22,12 +22,12 @@ const I = {
 const avc = s => { let h = 0; s = String(s || 'G').toLowerCase(); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997; return 'c' + (h % 8); };
 const ico = n => '<svg viewBox="0 0 24 24">' + (I[n] || '') + '</svg>';
 const NAV = [
-  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Moderation'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'],
+  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Moderation'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
   ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega']
 ];
-const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', reports: 'Reports', claims: 'Claim requests', users: 'Users & developers', broadcast: 'Broadcast' };
-const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, reviews: {}, stats: {}, failed: [], loaded: false };
-const UI = { appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
+const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast' };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const UI = { tkTab: 'wait', reply: {}, appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
 const nf = n => { n = +n || 0; return n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K' : n.toLocaleString('en-US'); };
@@ -70,7 +70,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -308,11 +308,70 @@ ACT.sendBc = async () => {
   try { await db.ref().update(up); el.value = ''; toast('Sent to ' + targets.length + ' developers'); $('#bcPrev').textContent = 'Your message appears here…'; $('#bcLen').textContent = '0 / 280'; } catch (e) { fail(e); }
 };
 
+
+/* ---------- support tickets ---------- */
+const TKC = { account: 'Account and login', app: 'App upload or listing', review: 'Reviews and ratings', claim: 'Claim request', bug: 'Bug or technical problem', other: 'Something else' };
+const tkList = () => Object.keys(S.tickets || {}).map(id => ({ id, ...S.tickets[id] })).filter(t => t && typeof t === 'object' && t.subject);
+const tkMsgs = t => Object.keys(t.messages || {}).map(k => ({ id: k, ...t.messages[k] })).sort((a, b) => (a.at || 0) - (b.at || 0));
+const tkStat = t => t.status === 'closed' ? pill('', 'Closed') : t.lastBy === 'admin' ? pill('ok', 'Answered') : pill('warn', 'Awaiting reply');
+const tkPrio = t => t.priority === 'high' ? pill('bad', 'High') : t.priority === 'low' ? pill('nd', 'Low') : '';
+const CANNED = ['Thanks for reporting this. We are looking into it and will update you here.', 'Could you share more details (app name, steps and any error message)?', 'This is fixed now. Please check again and let us know if it still happens.'];
+function vTickets() {
+  const id = routeId(); if (id) return vTicketOne(id);
+  const all = tkList(), tabs = [['wait', 'Awaiting reply', t => t.status !== 'closed' && t.lastBy !== 'admin'], ['done', 'Answered', t => t.status !== 'closed' && t.lastBy === 'admin'], ['closed', 'Closed', t => t.status === 'closed'], ['all', 'All', () => true]];
+  const cur = tabs.find(t => t[0] === UI.tkTab) || tabs[0];
+  const list = all.filter(cur[2]).sort((a, b) => (+b.updatedAt || 0) - (+a.updatedAt || 0));
+  const head = `<div class="toolbar"><div class="chips grow" style="flex:1">${tabs.map(t => `<button class="chip ${UI.tkTab === t[0] ? 'on' : ''}" data-act="tkTab" data-t="${t[0]}">${t[1]} · ${all.filter(t[2]).length}</button>`).join('')}</div><button class="btn sm" data-act="tkRefresh">${ico('swap')}Refresh</button></div>`;
+  if (!list.length) return head + `<div class="empty card">${ico('chat')}<b>No tickets here</b>${S.failed.includes('tickets') ? '<p>Tickets could not be loaded. Publish the latest Firebase rules.</p>' : ''}</div>`;
+  return head + '<div class="stack">' + list.map(t => `<a class="item tk-row" href="#/tickets/${esc(t.id)}"><div class="item-h" style="margin:0"><div class="avatar ${avc(t.devName)}" style="width:40px;height:40px;border-radius:50%">${esc((t.devName || '?')[0].toUpperCase())}</div><div class="grow"><b>${esc(t.subject)}</b><div class="meta">${esc(t.devName || 'Developer')} · ${esc(TKC[t.category] || 'General')}${t.appName ? ' · ' + esc(t.appName) : ''} · ${ago(t.updatedAt)}</div></div>${tkPrio(t)}${tkStat(t)}</div></a>`).join('') + '</div>';
+}
+function vTicketOne(id) {
+  const t = S.tickets[id]; const back = `<a class="btn sm ghost" href="#/tickets" style="margin-bottom:14px">${ico('x')}Back to tickets</a>`;
+  if (!t) return back + `<div class="empty card">${ico('chat')}<b>Ticket not found</b></div>`;
+  const closed = t.status === 'closed';
+  const msgs = tkMsgs(t).map(m => m.by === 'admin'
+    ? `<div class="tkm adm"><div class="tkw">You (support) · ${ago(m.at)}</div><div class="tkb">${esc(m.text)}</div></div>`
+    : `<div class="tkm dv"><div class="tkw">${esc(m.name || t.devName || 'Developer')} · ${ago(m.at)}</div><div class="tkb">${esc(m.text)}</div></div>`).join('');
+  return back + `<div class="card"><div class="card-h"><div><h3 style="font-size:18px">${esc(t.subject)}</h3><div class="sub">#${esc(id.slice(-6).toUpperCase())} · opened ${dstr(t.createdAt)}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap">${tkPrio(t)}${tkStat(t)}</div></div>
+  <dl class="kv"><div><dt>Developer</dt><dd>${esc(t.devName || '—')}${S.users[t.uid] && S.users[t.uid].username ? ' (@' + esc(S.users[t.uid].username) + ')' : ''}</dd></div><div><dt>Email</dt><dd>${esc(t.email || '—')}</dd></div><div><dt>Topic</dt><dd>${esc(TKC[t.category] || 'General')}</dd></div><div><dt>Related app</dt><dd>${esc(t.appName || '—')}</dd></div></dl>
+  <div class="tkt">${msgs}</div>
+  ${closed ? `<div class="hint warn">${ico('flag')}This ticket is closed.</div><div class="actions"><button class="btn" data-act="tkReopen" data-id="${esc(id)}">${ico('play')}Reopen ticket</button></div>` : `
+  <label class="field" style="margin-top:14px"><span>Your reply (the developer gets a notification)</span><textarea id="tkText" maxlength="2000" placeholder="Write your reply…">${esc(UI.reply[id] || '')}</textarea></label>
+  <div class="chips" style="margin-bottom:12px">${CANNED.map((c, i) => `<button class="chip" data-act="tkCanned" data-i="${i}">${esc(c.slice(0, 34))}…</button>`).join('')}</div>
+  <div class="actions"><button class="btn primary" data-act="tkSend" data-id="${esc(id)}">${ico('send')}Send reply</button><button class="btn danger" data-act="tkClose" data-id="${esc(id)}">${ico('check')}Close ticket</button></div>`}</div>`;
+}
+ACT.tkTab = d => { UI.tkTab = d.t; rerender(); };
+ACT.tkCanned = d => { const el = $('#tkText'); if (el) { el.value = CANNED[+d.i]; UI.reply[routeId()] = el.value; el.focus(); } };
+ACT.tkRefresh = async () => { try { S.tickets = (await db.ref('tickets').once('value')).val() || {}; toast('Tickets refreshed'); rerender(); } catch (e) { fail(e); } };
+async function tkWrite(id, status, extra, text, note) {
+  const t = S.tickets[id], now = Date.now(), up = {};
+  up[`tickets/${id}/status`] = status; up[`tickets/${id}/updatedAt`] = now; up[`userTickets/${t.uid}/${id}/status`] = status; up[`userTickets/${t.uid}/${id}/updatedAt`] = now;
+  if (extra) { up[`tickets/${id}/lastBy`] = 'admin'; up[`userTickets/${t.uid}/${id}/lastBy`] = 'admin'; up[`userTickets/${t.uid}/${id}/unread`] = true; }
+  let mid = null;
+  if (text) { mid = 'm' + now.toString(36) + Math.random().toString(36).slice(2, 6); up[`tickets/${id}/messages/${mid}`] = { by: 'admin', name: 'UptoZishu Support', text, at: now }; }
+  if (note) up[`notifications/${t.uid}/tk_${id.slice(-8)}_${now}`] = { type: 'ticket', ticketId: id, text: note.slice(0, 280), snippet: (text || '').slice(0, 190), timestamp: now, read: false };
+  await db.ref().update(up);
+  t.status = status; t.updatedAt = now; if (extra) t.lastBy = 'admin';
+  if (mid) { t.messages = t.messages || {}; t.messages[mid] = up[`tickets/${id}/messages/${mid}`]; }
+}
+ACT.tkSend = async d => {
+  const el = $('#tkText'), text = el.value.trim(); if (text.length < 2) { el.style.borderColor = 'var(--bad)'; return; }
+  const t = S.tickets[d.id];
+  try { await tkWrite(d.id, 'answered', true, text, 'Support replied to your ticket: ' + t.subject); UI.reply[d.id] = ''; toast('Reply sent — developer notified'); rerender(); } catch (e) { fail(e); }
+};
+ACT.tkClose = async d => {
+  if (!(await ask({ title: 'Close this ticket?', text: 'The developer is notified and can reopen it by replying.', ok: 'Close ticket' }))) return;
+  try { await tkWrite(d.id, 'closed', false, '', 'Your ticket was closed: ' + S.tickets[d.id].subject); toast('Ticket closed'); rerender(); } catch (e) { fail(e); }
+};
+ACT.tkReopen = async d => { try { await tkWrite(d.id, 'open', false, '', ''); toast('Ticket reopened'); rerender(); } catch (e) { fail(e); } };
+setInterval(() => { if (S.user && S.loaded && !document.hidden && route() === 'tickets' && !(document.activeElement && document.activeElement.id === 'tkText')) db.ref('tickets').once('value').then(x => { S.tickets = x.val() || {}; rerender(); }).catch(() => {}); }, 60000);
+
 /* ---------- router ---------- */
-const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, users: vUsers, broadcast: vBroadcast };
+const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, tickets: vTickets, users: vUsers, broadcast: vBroadcast };
 function route() { return (location.hash.replace(/^#\/?/, '').split('/')[0]) || ''; }
+function routeId() { return decodeURIComponent(location.hash.replace(/^#\/?/, '').split('/')[1] || ''); }
 function buildNav() {
-  const c = { reports: reportList().length, claims: pendingClaims().length };
+  const c = { reports: reportList().length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
   $('#nav').innerHTML = NAV.map(n => n[0] === 'h' ? `<div class="nav-h">${n[1]}</div>` : `<a class="nav-a ${route() === n[0] ? 'on' : ''}" href="#/${n[0]}">${ico(n[2])}<span>${n[1]}</span>${c[n[0]] ? `<span class="cnt">${c[n[0]]}</span>` : ''}</a>`).join('');
 }
 function rerender() {
@@ -328,6 +387,7 @@ function bindView() {
   const on = (id, fn) => { const el = $('#' + id); if (el) el.addEventListener('input', fn); };
   on('appQ', e => { UI.appQ = e.target.value; UI.appLimit = 40; rerender(); }); on('revQ', e => { UI.revQ = e.target.value; UI.revLimit = 30; rerender(); }); on('userQ', e => { UI.userQ = e.target.value; rerender(); });
   const s = $('#appSort'); if (s) s.onchange = e => { UI.appSort = e.target.value; rerender(); };
+  const tt = $('#tkText'); if (tt) tt.addEventListener('input', () => { UI.reply[routeId()] = tt.value; });
   const bt = $('#bcText'); if (bt) bt.addEventListener('input', () => { $('#bcLen').textContent = bt.value.length + ' / 280'; $('#bcPrev').textContent = bt.value || 'Your message appears here…'; });
 }
 window.addEventListener('hashchange', () => { closeOv(); navOpen(false); rerender(); window.scrollTo(0, 0); });
