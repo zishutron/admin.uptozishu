@@ -310,6 +310,16 @@ ACT.sendBc = async () => {
 
 
 /* ---------- support tickets ---------- */
+// Paste your Google Apps Script web-app URL here to email developers when you reply (see mail-script/README.txt)
+const MAIL_ENDPOINT = '';
+async function tkMail(type, ticketId) {
+  if (!MAIL_ENDPOINT) return false;
+  try {
+    const token = await auth.currentUser.getIdToken();
+    await Promise.race([fetch(MAIL_ENDPOINT, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ type, ticketId, token }) }), new Promise(r => setTimeout(r, 6000))]);
+    return true;
+  } catch (e) { return false; }
+}
 const TKC = { account: 'Account and login', app: 'App upload or listing', review: 'Reviews and ratings', claim: 'Claim request', bug: 'Bug or technical problem', other: 'Something else' };
 const tkList = () => Object.keys(S.tickets || {}).map(id => ({ id, ...S.tickets[id] })).filter(t => t && typeof t === 'object' && t.subject);
 const tkMsgs = t => Object.keys(t.messages || {}).map(k => ({ id: k, ...t.messages[k] })).sort((a, b) => (a.at || 0) - (b.at || 0));
@@ -357,7 +367,7 @@ async function tkWrite(id, status, extra, text, note) {
 ACT.tkSend = async d => {
   const el = $('#tkText'), text = el.value.trim(); if (text.length < 2) { el.style.borderColor = 'var(--bad)'; return; }
   const t = S.tickets[d.id];
-  try { await tkWrite(d.id, 'answered', true, text, 'Support replied to your ticket: ' + t.subject); UI.reply[d.id] = ''; toast('Reply sent — developer notified'); rerender(); } catch (e) { fail(e); }
+  try { await tkWrite(d.id, 'answered', true, text, 'Support replied to your ticket: ' + t.subject); UI.reply[d.id] = ''; const mailed = await tkMail('reply', d.id); toast(MAIL_ENDPOINT ? (mailed ? 'Reply sent — notification and email sent' : 'Reply sent — notification sent (email failed)') : 'Reply sent — developer notified'); rerender(); } catch (e) { fail(e); }
 };
 ACT.tkClose = async d => {
   if (!(await ask({ title: 'Close this ticket?', text: 'The developer is notified and can reopen it by replying.', ok: 'Close ticket' }))) return;
