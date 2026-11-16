@@ -311,7 +311,7 @@ ACT.sendBc = async () => {
 
 /* ---------- support tickets ---------- */
 // Paste your Google Apps Script web-app URL here to email developers when you reply (see mail-script/README.txt)
-const MAIL_ENDPOINT = '';
+const MAIL_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxnsa5QzCWtto5671_JcJlefPOV9YcGlZUHMW9CrH1VuG0Qa8cNe94RLYpkFMC7G6Ga4g/exec';
 async function tkMail(type, ticketId) {
   if (!MAIL_ENDPOINT) return false;
   try {
