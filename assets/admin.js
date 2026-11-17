@@ -17,17 +17,18 @@ const I = {
   chat: '<path d="M21 12a8 8 0 0 1-11.500 7.200L3 21l1.800-5.500A8 8 0 1 1 21 12Z"/>', check: '<path d="m5 12 5 5 9-10"/>', x: '<path d="M6 6l12 12M18 6 6 18"/>', trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v5M14 11v5"/>',
   pause: '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>', play: '<path d="m7 4 13 8-13 8z"/>', swap: '<path d="M7 7h13l-3-3M17 17H4l3 3"/>', search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.500-3.500"/>',
   inbox: '<path d="M3 13l3-8h12l3 8v6H3zM3 13h5l1 3h6l1-3h5"/>', sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.900 4.900l1.400 1.400M17.700 17.700l1.400 1.400M2 12h2M20 12h2M4.900 19.100l1.400-1.400M17.700 6.300l1.400-1.400"/>',
-  moon: '<path d="M21 12.800A9 9 0 1 1 11.200 3a7 7 0 0 0 9.800 9.800Z"/>', send: '<path d="m22 2-11 11M22 2l-7 20-4-9-9-4Z"/>', plus: '<path d="M12 5v14M5 12h14"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', eyeoff: '<path d="M3 3l18 18M10.600 6.100A10 10 0 0 1 12 5c6.400 0 10 7 10 7a17 17 0 0 1-3.200 4M6.600 6.600A17 17 0 0 0 2 12s3.600 7 10 7c1.600 0 3-.4 4.300-1M9.900 9.900a3 3 0 0 0 4.200 4.200"/>'
+  moon: '<path d="M21 12.800A9 9 0 1 1 11.200 3a7 7 0 0 0 9.800 9.800Z"/>', send: '<path d="m22 2-11 11M22 2l-7 20-4-9-9-4Z"/>', plus: '<path d="M12 5v14M5 12h14"/>',
+  up: '<path d="m6 15 6-6 6 6"/>', down: '<path d="m6 9 6 6 6-6"/>', clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', eyeoff: '<path d="M3 3l18 18M10.600 6.100A10 10 0 0 1 12 5c6.400 0 10 7 10 7a17 17 0 0 1-3.200 4M6.600 6.600A17 17 0 0 0 2 12s3.600 7 10 7c1.600 0 3-.4 4.300-1M9.900 9.900a3 3 0 0 0 4.200 4.200"/>'
 };
 const avc = s => { let h = 0; s = String(s || 'G').toLowerCase(); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997; return 'c' + (h % 8); };
 const ico = n => '<svg viewBox="0 0 24 24">' + (I[n] || '') + '</svg>';
 const NAV = [
-  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
+  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Store'], ['storefront', 'Storefront', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
   ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega'],
   ['h', 'You'], ['history', 'History', 'clock']
 ];
-const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History' };
-const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History', storefront: 'Storefront' };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, susp: {}, sf: {}, reviews: {}, stats: {}, failed: [], loaded: false };
 const UI = { tkTab: 'wait', reply: {}, appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
@@ -71,7 +72,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -132,9 +133,9 @@ const ACT = {
     try { await db.ref(`reviews/${d.a}/${d.r}`).remove(); delete S.reviews[d.a][d.r]; await recount(d.a); logAct('delete', 'Deleted a review on "' + ((S.apps[d.a] || {}).name || 'app') + '"', { appId: d.a, appName: (S.apps[d.a] || {}).name, icon: (S.apps[d.a] || {}).icon }); toast('Review deleted'); rerender(); } catch (e) { fail(e); }
   },
   async verifyDev(d) {
-    const p = S.profiles[d.u]; if (!p) return; const on = p.verified !== true;
-    if (!(await ask({ title: (on ? 'Verify ' : 'Remove verified badge from ') + (p.name || 'this developer') + '?', text: on ? 'A Verified badge shows on their store developer page.' : '', ok: on ? 'Verify' : 'Remove', danger: !on }))) return;
-    try { await db.ref(`devprofiles/${d.u}/verified`).set(on ? true : null); if (on) p.verified = true; else delete p.verified; logAct('profile', (on ? 'Verified ' : 'Removed verified badge from ') + (p.name || 'a developer')); toast(on ? 'Developer verified' : 'Badge removed'); rerender(); } catch (e) { fail(e); }
+    const p = S.profiles[d.u]; if (!p || !p.name) { toast('This developer has not finished their profile yet', 'bad'); return; } const on = p.verified !== true;
+    if (!(await ask({ title: (on ? 'Verify ' : 'Remove verified badge from ') + (p.name || 'this developer') + '?', text: on ? 'A Verified badge shows on their store developer page and on all their apps.' : 'Their developer page and apps will show Unverified.', ok: on ? 'Verify' : 'Remove', danger: !on }))) return;
+    try { const vn = note(d.u, 'vf_' + Date.now(), on ? 'Your developer profile is now verified. The Verified badge shows on your store page and apps.' : 'The Verified badge was removed from your developer profile.'); const vu = {}; vu[`devprofiles/${d.u}/verified`] = on ? true : null; if (vn) vu[vn.path] = vn.value; await db.ref().update(vu); if (on) p.verified = true; else delete p.verified; logAct('profile', (on ? 'Verified ' : 'Removed verified badge from ') + (p.name || 'a developer')); toast(on ? 'Developer verified' : 'Badge removed'); rerender(); } catch (e) { fail(e); }
   },
   async resolve(d) { try { const rp = S.reports[d.id] || {}; await db.ref('reports/' + d.id).remove(); delete S.reports[d.id]; logAct('report', 'Resolved a report on "' + (rp.appName || 'app') + '"' + (rp.reason ? ' (' + rp.reason + ')' : ''), { appId: rp.appId, appName: rp.appName }); toast('Report resolved'); rerender(); } catch (e) { fail(e); } },
   async approve(d) {
@@ -284,20 +285,20 @@ function vClaims() {
 
 function vUsers() {
   const m = {}, ensure = u => m[u] || (m[u] = { uid: u, apps: 0, reviews: 0 });
-  Object.keys(S.users).forEach(u => Object.assign(ensure(u), S.users[u]));
+  Object.keys(S.users).forEach(u => Object.assign(ensure(u), S.users[u])); Object.keys(S.susp || {}).forEach(u => ensure(u));
   Object.keys(S.devs).forEach(u => { const d = ensure(u); d.isDev = true; d.email = S.devs[u].email; d.name = d.name || S.devs[u].displayName; d.username = d.username || S.devs[u].username; });
   appList().forEach(a => { if (a.developerUid) { const d = ensure(a.developerUid); d.isDev = true; d.apps++; if (!d.name) d.name = a.developerName; } });
   allReviews().forEach(r => { ensure(r.revId).reviews++; });
   let list = Object.values(m); const q = UI.userQ.trim().toLowerCase();
   if (q) list = list.filter(u => [u.name, u.username, u.email, u.uid].join(' ').toLowerCase().includes(q));
-  const cnt = f => Object.values(m).filter(u => f === 'all' || (f === 'dev' ? u.isDev : u.reviews)).length;
-  if (UI.userF === 'dev') list = list.filter(u => u.isDev); else if (UI.userF === 'rev') list = list.filter(u => u.reviews);
+  const cnt = f => Object.values(m).filter(u => f === 'all' || (f === 'dev' ? u.isDev : f === 'sus' ? S.susp[u.uid] : u.reviews)).length;
+  if (UI.userF === 'dev') list = list.filter(u => u.isDev); else if (UI.userF === 'rev') list = list.filter(u => u.reviews); else if (UI.userF === 'sus') list = list.filter(u => S.susp[u.uid]);
   list.sort((a, b) => (b.apps - a.apps) || (b.reviews - a.reviews) || (+b.createdAt || 0) - (+a.createdAt || 0));
   const shown = list.slice(0, 80);
   return `<div class="toolbar"><div class="grow">${ico('search')}<input id="userQ" type="search" placeholder="Search name, username, email, uid…" value="${esc(UI.userQ)}"></div></div>
-  <div class="chips" style="margin-bottom:16px">${[['all', 'Everyone'], ['dev', 'Developers'], ['rev', 'Reviewers']].map(([k, t]) => `<button class="chip ${UI.userF === k ? 'on' : ''}" data-act="userF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
+  <div class="chips" style="margin-bottom:16px">${[['all', 'Everyone'], ['dev', 'Developers'], ['rev', 'Reviewers'], ['sus', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.userF === k ? 'on' : ''}" data-act="userF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
   <div class="table" style="--cols:minmax(0,2fr) minmax(0,1.4fr) 100px 90px 110px"><div class="tr-h"><div>Person</div><div>Email</div><div>Role</div><div>Reviews</div><div>Joined · Verify</div></div>
-  ${shown.length ? shown.map(u => `<div class="tr-r" style="cursor:default"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) + ((S.profiles[u.uid] || {}).verified ? ' ' + pill('ok', 'Verified') : '') : pill('', 'User')}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${u.isDev && S.profiles[u.uid] ? `<button class="btn sm ${S.profiles[u.uid].verified ? '' : 'good'}" data-act="verifyDev" data-u="${esc(u.uid)}">${S.profiles[u.uid].verified ? 'Unverify' : 'Verify'}</button>` : dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
+  ${shown.length ? shown.map(u => `<div class="tr-r" data-act="openUser" data-u="${esc(u.uid)}"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) + ((S.profiles[u.uid] || {}).verified ? ' ' + pill('ok', 'Verified') : ' ' + pill('nd', 'Unverified')) : pill('', 'User')}${S.susp[u.uid] ? ' ' + pill('bad', 'Suspended') : ''}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${u.isDev && S.profiles[u.uid] ? `<button class="btn sm ${S.profiles[u.uid].verified ? '' : 'good'}" data-act="verifyDev" data-u="${esc(u.uid)}">${S.profiles[u.uid].verified ? 'Unverify' : 'Verify'}</button>` : dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
   <div class="card" style="margin-top:16px"><h3>Add another admin</h3><div class="sub">Open Firebase → Realtime Database → add <code>admins</code> → <code>&lt;uid&gt;</code> = <code>true</code>. Removing it removes admin access immediately.</div></div>`;
 }
 ACT.userF = d => { UI.userF = d.k; rerender(); };
@@ -549,7 +550,7 @@ ACT.upApprove = d => decideUpdate(d.k, true);
 ACT.upReject = d => decideUpdate(d.k, false);
 
 /* ---------- history ---------- */
-const LOG_ICO = { approve: 'check', reject: 'x', suspend: 'pause', restore: 'play', delete: 'trash', ticket: 'chat', review: 'star', claim: 'shield', profile: 'users', report: 'flag', transfer: 'swap' };
+const LOG_ICO = { store: 'star', approve: 'check', reject: 'x', suspend: 'pause', restore: 'play', delete: 'trash', ticket: 'chat', review: 'star', claim: 'shield', profile: 'users', report: 'flag', transfer: 'swap' };
 const LOG_TONE = { approve: 'ok', restore: 'ok', reject: 'bad', suspend: 'bad', delete: 'bad', report: 'warn', review: 'warn' };
 function vHistory() {
   const list = Object.keys(S.logs || {}).map(id => ({ id, ...S.logs[id] })).filter(l => l && l.ts).sort((a, b) => b.ts - a.ts);
@@ -573,8 +574,91 @@ ACT.logClear = async () => {
   try { await db.ref(`adminLogs/${S.user.uid}`).remove(); S.logs = {}; rerender(); toast('History cleared'); } catch (e) { fail(e); }
 };
 
+
+/* ---------- user / developer control ---------- */
+function openUser(uid) {
+  const u = S.users[uid] || {}, d = S.devs[uid] || {}, p = S.profiles[uid] || {}, sp = S.susp[uid];
+  const apps = appList().filter(a => a.developerUid === uid), revs = allReviews().filter(r => r.revId === uid).length;
+  const name = u.name || p.name || d.displayName || 'Unnamed', un = u.username || p.username || d.username || '';
+  const isDev = !!(apps.length || S.devs[uid]), self = uid === S.user.uid;
+  const kv = (k, v) => `<div><dt>${k}</dt><dd>${v == null || v === '' ? '—' : v}</dd></div>`;
+  UI.openId = null; ov.className = 'overlay'; ov.hidden = false;
+  ov.innerHTML = `<aside class="drawer"><div class="dr-h"><div class="avatar ${avc(un || name)}" style="width:44px;height:44px;border-radius:50%">${esc(name[0].toUpperCase())}</div><div class="grow"><h3>${esc(name)}</h3><div class="muted">${un ? '@' + esc(un) : esc(uid)}</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div>
+  <div class="dr-b">
+  <div class="dr-sec"><div class="chips">${isDev ? pill('vio', 'Developer') : pill('', 'User')}${isDev ? (p.verified ? pill('ok', 'Verified') : pill('nd', 'Unverified')) : ''}${sp ? pill('bad', 'Suspended') : pill('ok', 'Active')}${self ? pill('info', 'You') : ''}</div>${sp ? `<div class="meta" style="margin-top:10px">Suspended ${ago(+sp.at)}. Reason: ${esc(sp.reason || '—')}</div>` : ''}</div>
+  <div class="dr-sec"><h4>Account</h4><dl class="kv">${kv('Email', esc(d.email || u.email || ''))}${kv('Uid', '<code>' + esc(uid) + '</code>')}${kv('Joined', dstr(+u.createdAt || +p.createdAt))}${kv('Apps', apps.length)}${kv('Reviews written', revs)}${kv('Country', esc(p.location || d.country || ''))}</dl></div>
+  ${isDev ? `<div class="dr-sec"><h4>Developer badge</h4><p class="muted" style="margin-bottom:10px">${p.name ? 'The badge shows on their store developer page and on every app they publish.' : 'This developer has not finished their profile yet, so they cannot be verified.'}</p><button class="btn ${p.verified ? '' : 'good'}" ${p.name ? '' : 'disabled'} data-act="usVerify" data-u="${esc(uid)}">${ico('check')}${p.verified ? 'Remove verified badge' : 'Verify developer'}</button></div>
+  <div class="dr-sec"><h4>Apps (${apps.length})</h4>${apps.length ? apps.slice(0, 12).map(a => `<div class="item-h" style="padding:8px 0"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><b>${esc(a.name)}</b><div class="meta">${esc(a.version || '')}</div></div>${statPill(a)}<button class="btn sm" data-act="openApp" data-id="${esc(a.id)}">Open</button></div>`).join('') : '<div class="muted">No apps</div>'}</div>` : ''}
+  <div class="dr-sec"><h4>Account control</h4>${self ? '<p class="muted">This is your own account.</p>' : sp
+    ? `<p class="muted" style="margin-bottom:10px">Unsuspending lets them use the console again${apps.some(a => String(a.suspendedReason || '').startsWith('Developer account suspended')) ? ' and puts their apps back on the store' : ''}.</p><button class="btn good" data-act="usUnsuspend" data-u="${esc(uid)}">${ico('check')}Unsuspend account</button>`
+    : `<p class="muted" style="margin-bottom:10px">A suspended person cannot upload, update, review, report or open tickets${apps.length ? ', and all their live apps are hidden from the store' : ''}. They see the reason in the console.</p><button class="btn danger" data-act="usSuspend" data-u="${esc(uid)}">${ico('pause')}Suspend account</button>`}</div>
+  </div><div class="dr-f"><button class="btn" id="drClose2" style="margin-left:auto">Close</button></div></aside>`;
+  $('#drClose').onclick = closeOv; $('#drClose2').onclick = closeOv; document.onkeydown = e => { if (e.key === 'Escape') closeOv(); };
+}
+ACT.openUser = d => openUser(d.u);
+ACT.usVerify = async d => { await ACT.verifyDev(d); openUser(d.u); };
+ACT.usSuspend = async d => {
+  const uid = d.u; if (uid === S.user.uid) return;
+  const name = (S.users[uid] || {}).name || (S.profiles[uid] || {}).name || 'this account', apps = appList().filter(a => a.developerUid === uid && stat(a) === 'live');
+  const why = await ask({ title: 'Suspend ' + name + '?', text: 'They cannot upload, update, review, report or open tickets until you unsuspend them.' + (apps.length ? ` Their ${apps.length} live app${apps.length === 1 ? '' : 's'} disappear from the store after the next rebuild.` : ''), input: 'Reason (shown to them)', value: 'Broke the store rules.', ok: 'Suspend account', danger: true, required: true }); if (why === null) return;
+  const now = Date.now(), up = {}, tag = 'Developer account suspended: ' + why.slice(0, 150);
+  up['suspendedUsers/' + uid] = { reason: why.slice(0, 300), at: now, by: S.user.uid };
+  apps.forEach(a => { up[`apps/${a.id}/status`] = 'suspended'; up[`apps/${a.id}/prevStatus`] = a.status || 'live'; up[`apps/${a.id}/suspendedReason`] = tag.slice(0, 200); });
+  const n = note(uid, 'sus_' + now, 'Your account was suspended. Reason: ' + why); if (n) up[n.path] = n.value;
+  try {
+    await db.ref().update(up); S.susp[uid] = up['suspendedUsers/' + uid];
+    apps.forEach(a => { S.apps[a.id].status = 'suspended'; S.apps[a.id].prevStatus = a.status || 'live'; S.apps[a.id].suspendedReason = tag; });
+    logAct('suspend', 'Suspended account of ' + name + (apps.length ? ' and ' + apps.length + ' app(s)' : ''), { note: why }); toast('Account suspended'); rerender(); openUser(uid);
+  } catch (e) { fail(e); }
+};
+ACT.usUnsuspend = async d => {
+  const uid = d.u, name = (S.users[uid] || {}).name || (S.profiles[uid] || {}).name || 'this account';
+  const apps = appList().filter(a => a.developerUid === uid && a.status === 'suspended' && String(a.suspendedReason || '').startsWith('Developer account suspended'));
+  if (!(await ask({ title: 'Unsuspend ' + name + '?', text: apps.length ? `Their ${apps.length} hidden app${apps.length === 1 ? '' : 's'} come back to the store after the next rebuild.` : 'They can use the console again.', ok: 'Unsuspend' }))) return;
+  const now = Date.now(), up = {}; up['suspendedUsers/' + uid] = null;
+  apps.forEach(a => { up[`apps/${a.id}/status`] = a.prevStatus && a.prevStatus !== 'suspended' ? a.prevStatus : 'live'; up[`apps/${a.id}/suspendedReason`] = null; });
+  const n = note(uid, 'uns_' + now, 'Your account is active again. You can use the Developer Console as usual.'); if (n) up[n.path] = n.value;
+  try {
+    await db.ref().update(up); delete S.susp[uid]; apps.forEach(a => { S.apps[a.id].status = up[`apps/${a.id}/status`]; S.apps[a.id].suspendedReason = null; });
+    logAct('restore', 'Unsuspended account of ' + name, {}); toast('Account is active again'); rerender(); openUser(uid);
+  } catch (e) { fail(e); }
+};
+
+/* ---------- storefront: featured apps + editor's choice ---------- */
+const SF_KINDS = { featured: { title: 'Featured apps', sub: 'Shown as the big banner slides at the top of the store home page.', max: 8, auto: 'Nothing picked, so the store shows the most downloaded apps that have a feature banner.' }, editors: { title: "Editor's Choice", sub: "Shown on the Editor's Choice page and in its pill on the home page.", max: 24, auto: 'Nothing picked, so the store shows verified apps, or the best rated apps with a banner.' } };
+const sfList = k => { const v = S.sf && S.sf[k]; return (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : []).filter(id => typeof id === 'string'); };
+async function sfSave(k, arr, msg) {
+  try { await db.ref('storefront/' + k).set(arr.length ? arr : null); S.sf = Object.assign({}, S.sf || {}); if (arr.length) S.sf[k] = arr; else delete S.sf[k]; rerender(); if (msg) toast(msg); } catch (e) { fail(e); }
+}
+function vStorefront() {
+  const sec = k => {
+    const m = SF_KINDS[k], ids = sfList(k);
+    const rows = ids.map((id, i) => {
+      const a = S.apps[id];
+      const warn = !a ? pill('bad', 'App deleted') : stat(a) !== 'live' ? pill('warn', 'Not live, hidden') : (k === 'featured' && !a.banner ? pill('nd', 'No banner') : '');
+      return `<div class="hs-row"><div class="sf-n">${i + 1}</div>${a ? `<img class="ico" style="width:42px;height:42px;border-radius:11px" src="${esc(a.icon || ICON)}" alt="">` : '<div class="ico" style="width:42px;height:42px"></div>'}<div class="hs-b"><b>${esc(a ? a.name : 'Unknown app')}</b><div class="meta">${esc(a ? (a.developerName || '') + (a.version ? ' · ' + a.version : '') : id)} ${warn}</div></div>
+      <button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="-1" ${i === 0 ? 'disabled style="opacity:.3"' : ''} aria-label="Move up">${ico('up')}</button><button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="1" ${i === ids.length - 1 ? 'disabled style="opacity:.3"' : ''} aria-label="Move down">${ico('down')}</button><button class="hs-x" data-act="sfRemove" data-k="${k}" data-i="${i}" aria-label="Remove">${ico('x')}</button></div>`;
+    }).join('');
+    return `<div class="card" style="margin-bottom:18px;padding:0"><div style="padding:18px 18px 8px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div class="grow"><h3>${m.title} <span class="muted" style="font-weight:500">${ids.length} / ${m.max}</span></h3><div class="sub">${m.sub}</div></div><button class="btn primary" data-act="sfAdd" data-k="${k}" ${ids.length >= m.max ? 'disabled' : ''}>${ico('plus')}Add app</button></div>
+    ${rows ? `<div class="hs">${rows}</div>` : `<div class="empty" style="padding:26px 18px">${ico('star')}<b>Automatic</b>${m.auto}</div>`}</div>`;
+  };
+  return `<div class="muted" style="margin-bottom:16px">Changes appear on the store after the next rebuild (about 10 minutes). Only live apps are shown, others are skipped automatically.</div>` + sec('featured') + sec('editors');
+}
+ACT.sfRemove = async d => { const arr = sfList(d.k); const id = arr[+d.i]; if (id === undefined) return; arr.splice(+d.i, 1); logAct('store', 'Removed "' + ((S.apps[id] || {}).name || 'app') + '" from ' + SF_KINDS[d.k].title, { appId: id, appName: (S.apps[id] || {}).name, icon: (S.apps[id] || {}).icon }); await sfSave(d.k, arr, 'Removed'); };
+ACT.sfMove = async d => { const arr = sfList(d.k), i = +d.i, j = i + (+d.dir); if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; await sfSave(d.k, arr); };
+ACT.sfAdd = d => {
+  const k = d.k, m = SF_KINDS[k], have = new Set(sfList(k));
+  const pool = appList().filter(a => stat(a) === 'live' && !have.has(a.id)).sort((x, y) => (x.name || '').localeCompare(y.name || ''));
+  UI.openId = null; ov.className = 'overlay'; ov.hidden = false;
+  ov.innerHTML = `<aside class="drawer"><div class="dr-h"><div class="grow"><h3>Add to ${esc(m.title)}</h3><div class="muted">Pick a live app</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div><div class="dr-b"><div class="toolbar"><div class="grow">${ico('search')}<input id="sfQ" type="search" placeholder="Search apps" autocomplete="off"></div></div><div id="sfPool"></div></div></aside>`;
+  const draw = () => { const q = $('#sfQ').value.trim().toLowerCase(); const l = pool.filter(a => !q || [a.name, a.developerName, a.category].join(' ').toLowerCase().includes(q)); $('#sfPool').innerHTML = l.length ? l.map(a => `<button class="sf-pick" data-id="${esc(a.id)}"><img class="ico" style="width:42px;height:42px;border-radius:11px" src="${esc(a.icon || ICON)}" alt=""><span><b>${esc(a.name)}</b><small>${esc(a.developerName || '')}${k === 'featured' && !a.banner ? ' · no banner' : ''}</small></span>${ico('plus')}</button>`).join('') : '<div class="empty">' + ico('search') + '<b>No apps found</b></div>'; };
+  draw(); $('#sfQ').oninput = draw; setTimeout(() => $('#sfQ').focus(), 50);
+  $('#sfPool').onclick = async e => { const b = e.target.closest('.sf-pick'); if (!b) return; const id = b.dataset.id, arr = sfList(k); if (arr.length >= m.max || arr.includes(id)) return; arr.push(id); closeOv(); logAct('store', 'Added "' + (S.apps[id].name) + '" to ' + m.title, { appId: id, appName: S.apps[id].name, icon: S.apps[id].icon }); await sfSave(k, arr, 'Added to ' + m.title); };
+  $('#drClose').onclick = closeOv; document.onkeydown = e => { if (e.key === 'Escape') closeOv(); };
+};
+
 /* ---------- router ---------- */
-const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast, history: vHistory };
+const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast, history: vHistory, storefront: vStorefront };
 function route() { return (location.hash.replace(/^#\/?/, '').split('/')[0]) || ''; }
 function routeId() { return decodeURIComponent(location.hash.replace(/^#\/?/, '').split('/')[1] || ''); }
 function buildNav() {
