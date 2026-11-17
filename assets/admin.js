@@ -23,10 +23,11 @@ const avc = s => { let h = 0; s = String(s || 'G').toLowerCase(); for (let i = 0
 const ico = n => '<svg viewBox="0 0 24 24">' + (I[n] || '') + '</svg>';
 const NAV = [
   ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
-  ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega']
+  ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega'],
+  ['h', 'You'], ['history', 'History', 'clock']
 ];
-const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast' };
-const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History' };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, reviews: {}, stats: {}, failed: [], loaded: false };
 const UI = { tkTab: 'wait', reply: {}, appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
@@ -70,7 +71,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -80,6 +81,13 @@ async function recount(appId) {
   if (S.apps[appId]) { S.apps[appId].rating = avg; S.apps[appId].reviewCount = rs.length; }
 }
 function note(uid, key, text, appId) { return uid ? { path: `notifications/${uid}/${key}`, value: { type: 'admin', appId: appId || '', text: String(text).slice(0, 280), timestamp: Date.now(), read: false } } : null; }
+function logAct(kind, text, x) {
+  try {
+    const ref = db.ref('adminLogs/' + S.user.uid).push(), e = Object.assign({ kind, text: String(text).slice(0, 200), ts: Date.now() }, x || {});
+    Object.keys(e).forEach(k => { if (e[k] == null || e[k] === '') delete e[k]; if (typeof e[k] === 'string') e[k] = e[k].slice(0, 300); });
+    S.logs[ref.key] = e; ref.set(e).catch(() => { });
+  } catch (err) { }
+}
 const fail = e => toast('Failed: ' + ((e && e.message) || 'error') + ' — check the Firebase rules', 'bad');
 
 /* ---------- actions ---------- */
@@ -89,20 +97,20 @@ const ACT = {
     const why = await ask({ title: 'Suspend "' + a.name + '"?', text: 'It will disappear from the store after the next store rebuild. The developer gets a notification.', input: 'Reason (shown to developer)', value: 'Reported for breaking the store rules.', ok: 'Suspend', danger: true, required: true }); if (why === null) return;
     const up = {}; up[`apps/${d.id}/status`] = 'suspended'; up[`apps/${d.id}/suspendedReason`] = why.slice(0, 200); up[`apps/${d.id}/prevStatus`] = a.status === 'suspended' ? (a.prevStatus || 'live') : (a.status || 'live');
     const n = note(a.developerUid, 'adm_' + ckey(d.id) + '_' + Date.now(), `Your app "${a.name}" was suspended. Reason: ${why}`, d.id); if (n) up[n.path] = n.value;
-    try { await db.ref().update(up); a.prevStatus = up[`apps/${d.id}/prevStatus`]; a.status = 'suspended'; a.suspendedReason = why; toast('App suspended'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref().update(up); a.prevStatus = up[`apps/${d.id}/prevStatus`]; a.status = 'suspended'; a.suspendedReason = why; logAct('suspend', 'Suspended "' + a.name + '"', { appId: d.id, appName: a.name, icon: a.icon, note: why }); toast('App suspended'); rerender(); } catch (e) { fail(e); }
   },
   async restore(d) {
     const a = S.apps[d.id]; if (!a) return;
     if (!(await ask({ title: 'Restore "' + a.name + '"?', text: 'It will be listed again after the next store rebuild.', ok: 'Restore' }))) return;
     const st = a.prevStatus && a.prevStatus !== 'suspended' ? a.prevStatus : 'live', up = {}; up[`apps/${d.id}/status`] = st; up[`apps/${d.id}/suspendedReason`] = null;
     const n = note(a.developerUid, 'adm_' + ckey(d.id) + '_' + Date.now(), `Your app "${a.name}" was restored.`, d.id); if (n) up[n.path] = n.value;
-    try { await db.ref().update(up); a.status = st; a.suspendedReason = null; toast('App restored'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref().update(up); a.status = st; a.suspendedReason = null; logAct('restore', 'Restored "' + a.name + '"', { appId: d.id, appName: a.name, icon: a.icon }); toast('App restored'); rerender(); } catch (e) { fail(e); }
   },
   async del(d) {
     const a = S.apps[d.id]; if (!a) return;
     if ((await ask({ title: 'Delete "' + a.name + '" forever?', text: 'This removes the app from the database. It cannot be undone.', input: 'Type DELETE to confirm', must: 'DELETE', ok: 'Delete app', danger: true })) === null) return;
     const up = {}; up[`apps/${d.id}`] = null; const n = note(a.developerUid, 'adm_' + ckey(d.id) + '_' + Date.now(), `Your app "${a.name}" was removed from the store by the admin.`, d.id); if (n) up[n.path] = n.value;
-    try { await db.ref().update(up); delete S.apps[d.id]; closeOv(); toast('App deleted'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref().update(up); logAct('delete', 'Deleted app "' + a.name + '"', { appName: a.name, icon: a.icon }); delete S.apps[d.id]; closeOv(); toast('App deleted'); rerender(); } catch (e) { fail(e); }
   },
   async transfer(d) {
     const a = S.apps[d.id]; if (!a) return;
@@ -112,23 +120,23 @@ const ACT = {
     const up = {}; up[`apps/${d.id}/developerUid`] = uid; up[`apps/${d.id}/developerName`] = nm;
     const n1 = note(uid, 'adm_' + ckey(d.id) + '_' + Date.now(), `The app "${a.name}" was transferred to you.`, d.id), n2 = a.developerUid !== uid && note(a.developerUid, 'adm_' + ckey(d.id) + '_o' + Date.now(), `The app "${a.name}" was transferred to another developer.`, d.id);
     if (n1) up[n1.path] = n1.value; if (n2) up[n2.path] = n2.value;
-    try { await db.ref().update(up); a.developerUid = uid; a.developerName = nm; toast('Ownership transferred'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref().update(up); a.developerUid = uid; a.developerName = nm; logAct('transfer', 'Transferred "' + a.name + '" to ' + nm, { appId: d.id, appName: a.name, icon: a.icon }); toast('Ownership transferred'); rerender(); } catch (e) { fail(e); }
   },
   async hideRev(d) {
     const r = (S.reviews[d.a] || {})[d.r]; if (!r) return; const hide = !r.hidden;
-    try { await db.ref(`reviews/${d.a}/${d.r}/hidden`).set(hide ? true : null); if (hide) r.hidden = true; else delete r.hidden; await recount(d.a); toast(hide ? 'Review hidden' : 'Review visible again'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref(`reviews/${d.a}/${d.r}/hidden`).set(hide ? true : null); if (hide) r.hidden = true; else delete r.hidden; await recount(d.a); logAct('review', (hide ? 'Hid' : 'Unhid') + ' a review on "' + ((S.apps[d.a] || {}).name || 'app') + '"', { appId: d.a, appName: (S.apps[d.a] || {}).name, icon: (S.apps[d.a] || {}).icon }); toast(hide ? 'Review hidden' : 'Review visible again'); rerender(); } catch (e) { fail(e); }
   },
   async delRev(d) {
     const r = (S.reviews[d.a] || {})[d.r]; if (!r) return;
     if (!(await ask({ title: 'Delete this review?', text: '"' + String(r.text || '').slice(0, 120) + '"\n\nThis cannot be undone.', ok: 'Delete', danger: true }))) return;
-    try { await db.ref(`reviews/${d.a}/${d.r}`).remove(); delete S.reviews[d.a][d.r]; await recount(d.a); toast('Review deleted'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref(`reviews/${d.a}/${d.r}`).remove(); delete S.reviews[d.a][d.r]; await recount(d.a); logAct('delete', 'Deleted a review on "' + ((S.apps[d.a] || {}).name || 'app') + '"', { appId: d.a, appName: (S.apps[d.a] || {}).name, icon: (S.apps[d.a] || {}).icon }); toast('Review deleted'); rerender(); } catch (e) { fail(e); }
   },
   async verifyDev(d) {
     const p = S.profiles[d.u]; if (!p) return; const on = p.verified !== true;
     if (!(await ask({ title: (on ? 'Verify ' : 'Remove verified badge from ') + (p.name || 'this developer') + '?', text: on ? 'A Verified badge shows on their store developer page.' : '', ok: on ? 'Verify' : 'Remove', danger: !on }))) return;
-    try { await db.ref(`devprofiles/${d.u}/verified`).set(on ? true : null); if (on) p.verified = true; else delete p.verified; toast(on ? 'Developer verified' : 'Badge removed'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref(`devprofiles/${d.u}/verified`).set(on ? true : null); if (on) p.verified = true; else delete p.verified; logAct('profile', (on ? 'Verified ' : 'Removed verified badge from ') + (p.name || 'a developer')); toast(on ? 'Developer verified' : 'Badge removed'); rerender(); } catch (e) { fail(e); }
   },
-  async resolve(d) { try { await db.ref('reports/' + d.id).remove(); delete S.reports[d.id]; toast('Report resolved'); rerender(); } catch (e) { fail(e); } },
+  async resolve(d) { try { const rp = S.reports[d.id] || {}; await db.ref('reports/' + d.id).remove(); delete S.reports[d.id]; logAct('report', 'Resolved a report on "' + (rp.appName || 'app') + '"' + (rp.reason ? ' (' + rp.reason + ')' : ''), { appId: rp.appId, appName: rp.appName }); toast('Report resolved'); rerender(); } catch (e) { fail(e); } },
   async approve(d) {
     const c = ((S.claims[d.u] || {})[d.a]); if (!c) return;
     if (!(await ask({ title: 'Approve this claim?', text: `"${c.appName}" moves to ${c.claimantName}. The previous owner loses access.`, ok: 'Approve' }))) return;
@@ -136,14 +144,14 @@ const ACT = {
     up[`claims/${d.u}/${d.a}/status`] = 'approved'; up[`claims/${d.u}/${d.a}/decidedAt`] = now;
     const n1 = { path: `notifications/${d.u}/claim_${ckey(d.a)}`, value: { type: 'claim', appId: d.a, text: `Your claim for "${c.appName}" was approved. It is now in your My Apps.`, timestamp: now, read: false } }; up[n1.path] = n1.value;
     if (c.currentOwner && c.currentOwner !== d.u) { up[`notifications/${c.currentOwner}/claimout_${ckey(d.a)}`] = { type: 'claim', appId: d.a, text: `"${c.appName}" was moved to its original developer after a claim.`, timestamp: now, read: false }; }
-    try { await db.ref().update(up); Object.assign(c, { status: 'approved', decidedAt: now }); if (S.apps[d.a]) { S.apps[d.a].developerUid = d.u; S.apps[d.a].developerName = c.claimantName; } toast('Claim approved'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref().update(up); Object.assign(c, { status: 'approved', decidedAt: now }); if (S.apps[d.a]) { S.apps[d.a].developerUid = d.u; S.apps[d.a].developerName = c.claimantName; } logAct('approve', 'Approved claim for "' + c.appName + '"', { appId: d.a, appName: c.appName }); toast('Claim approved'); rerender(); } catch (e) { fail(e); }
   },
   async reject(d) {
     const c = ((S.claims[d.u] || {})[d.a]); if (!c) return;
     const why = await ask({ title: 'Reject this claim?', text: 'Say why. The developer will see it.', input: 'Reason', value: 'We could not confirm that you own this app.', ok: 'Reject', danger: true, required: true }); if (why === null) return;
     const now = Date.now(), up = {}; up[`claims/${d.u}/${d.a}/status`] = 'rejected'; up[`claims/${d.u}/${d.a}/reason`] = why.slice(0, 200); up[`claims/${d.u}/${d.a}/decidedAt`] = now;
     up[`notifications/${d.u}/claim_${ckey(d.a)}`] = { type: 'claim', appId: d.a, text: `Your claim for "${c.appName}" was rejected. Reason: ${why.slice(0, 150)}`, timestamp: now, read: false };
-    try { await db.ref().update(up); Object.assign(c, { status: 'rejected', reason: why, decidedAt: now }); toast('Claim rejected'); rerender(); } catch (e) { fail(e); }
+    try { await db.ref().update(up); Object.assign(c, { status: 'rejected', reason: why, decidedAt: now }); logAct('reject', 'Rejected claim for "' + c.appName + '"', { appId: d.a, appName: c.appName, note: why }); toast('Claim rejected'); rerender(); } catch (e) { fail(e); }
   },
   openApp(d) { openApp(d.id); },
   go(d) { closeOv(); location.hash = '#/' + d.to; },
@@ -246,10 +254,11 @@ function vReviews() {
 }
 ACT.revF = d => { UI.revF = d.k; UI.revLimit = 30; rerender(); };
 
+const reportImgs = r => { const l = (Array.isArray(r.images) ? r.images : (r.evidence ? [r.evidence] : [])).filter(isImg); return l.length ? `<div class="meta">Screenshots (${l.length})</div><div class="shots">${l.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><span>${i + 1}</span><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : (r.evidence ? `<p class="body"><a href="${esc(r.evidence)}" target="_blank" rel="noopener">${esc(r.evidence)}</a></p>` : ''); };
 function vReports() {
   const list = reportList().sort((a, b) => (+b.ts || 0) - (+a.ts || 0));
   if (!list.length) return `<div class="empty card">${ico('flag')}<b>No open reports</b>Reports from store users show up here.</div>`;
-  return '<div class="stack">' + list.map(r => { const ap = S.apps[r.appId]; return `<div class="item"><div class="item-h"><img class="ico" src="${esc((ap && ap.icon) || ICON)}" alt=""><div class="grow"><b>${esc(r.appName || r.appId)}</b><div class="meta">${ago(+r.ts)}${r.username ? ' · reported by @' + esc(r.username) : ''}</div></div>${pill('bad', r.reason || 'Report')}${ap && stat(ap) === 'suspended' ? pill('', 'Already suspended') : ''}</div>${r.details ? `<p class="body">${esc(r.details)}</p>` : ''}<div class="actions">${ap ? `<button class="btn sm" data-act="openApp" data-id="${esc(r.appId)}">Open app</button>${stat(ap) !== 'suspended' ? `<button class="btn sm danger" data-act="suspend" data-id="${esc(r.appId)}">${ico('pause')}Suspend app</button>` : ''}` : '<span class="muted">App no longer exists</span>'}<button class="btn sm good" data-act="resolve" data-id="${esc(r.id)}" style="margin-left:auto">${ico('check')}Resolve</button></div></div>`; }).join('') + '</div>';
+  return '<div class="stack">' + list.map(r => { const ap = S.apps[r.appId]; return `<div class="item"><div class="item-h"><img class="ico" src="${esc((ap && ap.icon) || ICON)}" alt=""><div class="grow"><b>${esc(r.appName || r.appId)}</b><div class="meta">${ago(+r.ts)}${r.username ? ' · reported by @' + esc(r.username) : ''}</div></div>${pill('bad', r.reason || 'Report')}${ap && stat(ap) === 'suspended' ? pill('', 'Already suspended') : ''}</div>${r.details ? `<p class="body">${esc(r.details)}</p>` : ''}${reportImgs(r)}<div class="actions">${ap ? `<button class="btn sm" data-act="openApp" data-id="${esc(r.appId)}">Open app</button>${stat(ap) !== 'suspended' ? `<button class="btn sm danger" data-act="suspend" data-id="${esc(r.appId)}">${ico('pause')}Suspend app</button>` : ''}` : '<span class="muted">App no longer exists</span>'}<button class="btn sm good" data-act="resolve" data-id="${esc(r.id)}" style="margin-left:auto">${ico('check')}Resolve</button></div></div>`; }).join('') + '</div>';
 }
 
 const shotsOf = c => { const l = String(c.screenshots || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x)); return l.length ? `<div class="meta">Screenshots (${l.length}) — in the order the developer set</div><div class="shots">${l.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Screenshot ${i + 1}" loading="lazy"><span>${i + 1}</span></a>`).join('')}</div>` : ''; };
@@ -375,13 +384,13 @@ async function tkWrite(id, status, extra, text, note) {
 ACT.tkSend = async d => {
   const el = $('#tkText'), text = el.value.trim(); if (text.length < 2) { el.style.borderColor = 'var(--bad)'; return; }
   const t = S.tickets[d.id];
-  try { await tkWrite(d.id, 'answered', true, text, 'Support replied to your ticket: ' + t.subject); UI.reply[d.id] = ''; rerender(); const lastB = document.querySelector('.tkt .tkm:last-child'); if (lastB) lastB.classList.add('pop');
+  try { await tkWrite(d.id, 'answered', true, text, 'Support replied to your ticket: ' + t.subject); logAct('ticket', 'Replied to ticket "' + t.subject + '"'); UI.reply[d.id] = ''; rerender(); const lastB = document.querySelector('.tkt .tkm:last-child'); if (lastB) lastB.classList.add('pop');
     sentAnim('Reply sent', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
     if (MAIL_ENDPOINT) { const mailed = await tkMail('reply', d.id); if (!mailed) toast('Email could not be sent, notification was delivered', 'bad'); } } catch (e) { fail(e); }
 };
 ACT.tkClose = async d => {
-  if (!(await ask({ title: 'Close this ticket?', text: 'The developer is notified and can reopen it by replying.', ok: 'Close ticket' }))) return;
-  try { await tkWrite(d.id, 'closed', false, '', 'Your ticket was closed: ' + S.tickets[d.id].subject); toast('Ticket closed'); rerender(); } catch (e) { fail(e); }
+  if (!(await ask({ title: 'Close this ticket?', text: 'The developer is notified. A closed ticket cannot be replied to, they can open a new one.', ok: 'Close ticket' }))) return;
+  try { await tkWrite(d.id, 'closed', false, '', 'Your ticket was closed: ' + S.tickets[d.id].subject); logAct('ticket', 'Closed ticket "' + S.tickets[d.id].subject + '"'); toast('Ticket closed'); rerender(); } catch (e) { fail(e); }
 };
 ACT.tkReopen = async d => { try { await tkWrite(d.id, 'open', false, '', ''); toast('Ticket reopened'); rerender(); } catch (e) { fail(e); } };
 setInterval(() => { if (S.user && S.loaded && !document.hidden && route() === 'tickets' && !(document.activeElement && document.activeElement.id === 'tkText')) db.ref('tickets').once('value').then(x => { S.tickets = x.val() || {}; rerender(); }).catch(() => {}); }, 60000);
@@ -392,9 +401,14 @@ const pendingApps = () => appList().filter(a => a.status === 'pending').sort((a,
 const pendingProfiles = () => Object.keys(S.pend || {}).map(uid => ({ uid, ...S.pend[uid] })).filter(p => p && typeof p === 'object' && p.status === 'pending').sort((a, b) => (+a.submittedAt || 0) - (+b.submittedAt || 0));
 const PF_LABEL = { name: 'Name', tagline: 'Tagline', type: 'Type', about: 'About', location: 'Location', founded: 'Started', email: 'Contact email', website: 'Website', github: 'GitHub', twitter: 'X', instagram: 'Instagram', youtube: 'YouTube', telegram: 'Telegram', linkedin: 'LinkedIn', discord: 'Discord', logo: 'Logo', cover: 'Cover' };
 UI.apTab = 'apps';
+const pendingUpdates = () => { const o = []; Object.keys(S.upd || {}).forEach(u => Object.keys(S.upd[u] || {}).forEach(a => { const v = S.upd[u][a]; if (v && typeof v === 'object' && v.status === 'pending' && S.apps[a]) o.push({ ...v, uid: u, appId: a }); })); return o.sort((x, y) => (+x.submittedAt || 0) - (+y.submittedAt || 0)); };
+const UF_LABEL = { name: 'Name', category: 'Category', package: 'Package', version: 'Version', shortDescription: 'Short description', description: 'Description', downloadUrl: 'Download link', size: 'Size', tags: 'Tags', supportEmail: 'Support email', privacyPolicy: 'Privacy policy', website: 'Website', youtube: 'YouTube', minAndroid: 'Min Android', permissions: 'Permissions', whatsNew: "What's new", icon: 'Icon', banner: 'Featured image', screenshot: 'Screenshots' };
+const changedFields = (u, live) => Object.keys(UF_LABEL).filter(k => u[k] !== undefined && String(u[k] || '') !== String(live[k] || ''));
+const splitList = v => String(v || '').split(/[,\n]+/).map(x => x.trim()).filter(Boolean);
+const isImg = u => /^https?:\/\//i.test(u || '');
 function vApprovals() {
-  const pa = pendingApps(), pp = pendingProfiles();
-  const tabs = `<div class="chips" style="margin-bottom:16px"><button class="chip ${UI.apTab === 'apps' ? 'on' : ''}" data-act="apTab" data-t="apps">Apps · ${pa.length}</button><button class="chip ${UI.apTab === 'profiles' ? 'on' : ''}" data-act="apTab" data-t="profiles">Profile changes · ${pp.length}</button></div>`;
+  const pa = pendingApps(), pp = pendingProfiles(), pu = pendingUpdates();
+  const tabs = `<div class="chips" style="margin-bottom:16px"><button class="chip ${UI.apTab === 'apps' ? 'on' : ''}" data-act="apTab" data-t="apps">Apps · ${pa.length}</button><button class="chip ${UI.apTab === 'updates' ? 'on' : ''}" data-act="apTab" data-t="updates">App updates · ${pu.length}</button><button class="chip ${UI.apTab === 'profiles' ? 'on' : ''}" data-act="apTab" data-t="profiles">Profile changes · ${pp.length}</button></div>`;
   if (UI.apTab === 'apps') {
     if (!pa.length) return tabs + `<div class="empty card">${ico('check')}<b>No apps waiting</b>Apps that developers submit for review show up here.</div>`;
     return tabs + '<div class="stack">' + pa.map(a => {
@@ -403,7 +417,17 @@ function vApprovals() {
       ${a.shortDescription ? `<p class="body">${esc(a.shortDescription)}</p>` : ''}
       <dl class="kv"><div><dt>Package</dt><dd>${esc(a.package || '—')}</dd></div><div><dt>Download link</dt><dd>${a.downloadUrl ? `<a href="${esc(a.downloadUrl)}" target="_blank" rel="noopener">${esc(hostOf(a.downloadUrl) || 'open')}</a>` : '—'}</dd></div><div><dt>Size</dt><dd>${esc(a.size || '—')}</dd></div><div><dt>Permissions</dt><dd>${esc(String(a.permissions || '').split(',').filter(Boolean).length)} declared</dd></div></dl>
       ${shots.length ? `<div class="shots">${shots.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : ''}
-      <div class="actions"><button class="btn sm" data-act="openApp" data-id="${esc(a.id)}">Full details</button><button class="btn sm good" data-act="apApprove" data-id="${esc(a.id)}">${ico('check')}Approve</button><button class="btn sm danger" data-act="apReject" data-id="${esc(a.id)}">${ico('x')}Reject</button></div></div>`;
+      <div class="actions"><button class="btn sm" data-act="openReview" data-k="${esc(a.id)}">Full details</button><button class="btn sm good" data-act="apApprove" data-id="${esc(a.id)}">${ico('check')}Approve</button><button class="btn sm danger" data-act="apReject" data-id="${esc(a.id)}">${ico('x')}Reject</button></div></div>`;
+    }).join('') + '</div>';
+  }
+  if (UI.apTab === 'updates') {
+    if (!pu.length) return tabs + `<div class="empty card">${ico('check')}<b>No app updates waiting</b>When a developer updates a live app, the new version waits here. The old version stays on the store until you approve.</div>`;
+    return tabs + '<div class="stack">' + pu.map(u => {
+      const live = S.apps[u.appId], ch = changedFields(u, live), key = u.uid + '|' + u.appId;
+      return `<div class="item"><div class="item-h"><img class="ico" src="${esc(u.icon || live.icon || ICON)}" alt=""><div class="grow"><b>${esc(u.name || live.name)} <span class="muted" style="font-weight:500">${esc(live.version || '')} → ${esc(u.version || live.version || '')}</span></b><div class="meta">${esc(live.developerName || userName(u.uid) || 'Developer')} · submitted ${ago(+u.submittedAt)}</div></div>${pill('warn', 'Update in review')}</div>
+      ${u.whatsNew ? `<p class="body"><b>What's new:</b> ${esc(String(u.whatsNew).slice(0, 300))}</p>` : ''}
+      <div class="chips" style="margin:8px 0 12px">${ch.length ? ch.map(k => pill('nd', UF_LABEL[k])).join('') : '<span class="muted">No visible changes</span>'}</div>
+      <div class="actions"><button class="btn sm" data-act="openReview" data-k="${esc(key)}" data-u="1">Review changes</button><button class="btn sm good" data-act="upApprove" data-k="${esc(key)}">${ico('check')}Approve</button><button class="btn sm danger" data-act="upReject" data-k="${esc(key)}">${ico('x')}Reject</button></div></div>`;
     }).join('') + '</div>';
   }
   if (!pp.length) return tabs + `<div class="empty card">${ico('check')}<b>No profile changes waiting</b>Edits to developer profiles show up here for approval.</div>`;
@@ -433,6 +457,7 @@ async function decideApp(id, ok) {
   try {
     await db.ref().update(up);
     a.status = ok ? 'live' : 'rejected'; a.reviewedAt = now; a.rejectReason = ok ? null : reason; if (ok) a.approved = true;
+    logAct(ok ? 'approve' : 'reject', (ok ? 'Approved app "' : 'Rejected app "') + a.name + '"', { appId: id, appName: a.name, icon: a.icon, note: ok ? '' : reason });
     closeOv(); rerender();
     sentAnim(ok ? 'App approved' : 'App rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
     if (MAIL_ENDPOINT) { const m = await mailCall('appdecision', id); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
@@ -454,7 +479,7 @@ ACT.pfApprove = async d => {
     await db.ref().update(up);
     S.profiles[uid] = Object.assign({}, S.profiles[uid] || {}, p, { updatedAt: now }); delete S.profiles[uid].status; delete S.profiles[uid].submittedAt; delete S.profiles[uid].rejectReason;
     delete S.pend[uid]; appList().forEach(a => { if (a.developerUid === uid && p.name) S.apps[a.id].developerName = p.name; });
-    rerender(); sentAnim('Profile approved', 'Developer notified in the console');
+    logAct('approve', 'Approved profile of ' + (p.name || 'a developer')); rerender(); sentAnim('Profile approved', 'Developer notified in the console');
   } catch (e) { fail(e); }
 };
 ACT.pfReject = async d => {
@@ -464,14 +489,96 @@ ACT.pfReject = async d => {
   const now = Date.now(), up = {};
   up[`devprofilePending/${uid}/status`] = 'rejected'; up[`devprofilePending/${uid}/rejectReason`] = reason.slice(0, 400);
   up[`notifications/${uid}/pf_${now}`] = { type: 'profile', text: 'Your profile changes were not approved. Please update them and submit again.', reason: reason.slice(0, 400), timestamp: now, read: false };
-  try { await db.ref().update(up); p.status = 'rejected'; p.rejectReason = reason; rerender(); toast('Rejected, developer notified'); } catch (e) { fail(e); }
+  try { await db.ref().update(up); p.status = 'rejected'; p.rejectReason = reason; logAct('reject', 'Rejected profile of ' + (p.name || 'a developer'), { note: reason }); rerender(); toast('Rejected, developer notified'); } catch (e) { fail(e); }
 };
+
+/* ---------- full review drawer (new app or app update) ---------- */
+function openReview(key, isUpd) {
+  let a, live = null, uid = '', aid = key;
+  if (isUpd) { [uid, aid] = key.split('|'); const u = (S.upd[uid] || {})[aid]; live = S.apps[aid]; if (!u || !live) return; a = Object.assign({}, live, u); }
+  else { a = S.apps[key]; if (!a) return; a = Object.assign({ id: key }, a); }
+  const ch = live ? changedFields(a, live) : [], mark = k => ch.includes(k) ? ' <span class="rv-new">changed</span>' : '';
+  const kv = (k, v, f) => `<div><dt>${k}${f ? mark(f) : ''}</dt><dd>${v == null || v === '' ? '—' : v}</dd></div>`;
+  const link = u => u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(hostOf(u) || u)}</a>` : '';
+  const perms = splitList(a.permissions), shots = splitList(a.screenshot).filter(isImg);
+  const imgBox = (u, cls) => isImg(u) ? `<a href="${esc(u)}" target="_blank" rel="noopener"><img class="${cls}" src="${esc(u)}" alt=""></a>` : '<div class="muted">Not added</div>';
+  const diff = live && ch.length ? `<div class="dr-sec"><h4>What changed</h4><table class="difft"><thead><tr><th></th><th>Live now</th><th>New</th></tr></thead><tbody>${ch.filter(k => !['icon', 'banner', 'screenshot'].includes(k)).map(k => `<tr><td class="muted">${UF_LABEL[k]}</td><td>${esc(String(live[k] || '—').slice(0, 160))}</td><td><b>${esc(String(a[k] || '—').slice(0, 160))}</b></td></tr>`).join('') || '<tr><td colspan="3" class="muted">Only images changed</td></tr>'}</tbody></table></div>` : '';
+  const act = isUpd ? `<button class="btn good" data-act="upApprove" data-k="${esc(key)}">${ico('check')}Approve update</button><button class="btn danger" data-act="upReject" data-k="${esc(key)}">${ico('x')}Reject</button>` : (a.status === 'pending' ? `<button class="btn good" data-act="apApprove" data-id="${esc(key)}">${ico('check')}Approve</button><button class="btn danger" data-act="apReject" data-id="${esc(key)}">${ico('x')}Reject</button>` : '');
+  UI.openId = null; ov.className = 'overlay'; ov.hidden = false;
+  ov.innerHTML = `<aside class="drawer"><div class="dr-h"><img class="ico" style="width:44px;height:44px;border-radius:12px" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><h3>${esc(a.name || 'Untitled')}</h3><div class="muted">${isUpd ? 'Update request' : 'New app'} · ${esc(a.package || '')}</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div>
+  <div class="dr-b">
+  ${diff}
+  <div class="dr-sec"><h4>Featured image${mark('banner')}</h4>${imgBox(a.banner, 'rv-banner')}</div>
+  <div class="dr-sec"><h4>Icon${mark('icon')}</h4>${imgBox(a.icon, 'rv-icon')}</div>
+  <div class="dr-sec"><h4>Screenshots (${shots.length})${mark('screenshot')}</h4>${shots.length ? `<div class="shots">${shots.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><span>${i + 1}</span><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : '<div class="muted">No screenshots</div>'}</div>
+  <div class="dr-sec"><h4>Overview</h4><dl class="kv">${kv('Version', esc(a.version), 'version')}${kv('Category', esc(a.category), 'category')}${kv('Size', esc(a.size), 'size')}${kv('Min Android', esc(a.minAndroid), 'minAndroid')}${kv('Package', esc(a.package), 'package')}${kv('Tags', esc(a.tags), 'tags')}</dl></div>
+  <div class="dr-sec"><h4>Short description${mark('shortDescription')}</h4><p>${esc(a.shortDescription || '—')}</p></div>
+  <div class="dr-sec"><h4>Full description${mark('description')}</h4><p class="rv-long">${esc(a.description || '—')}</p></div>
+  ${a.whatsNew ? `<div class="dr-sec"><h4>What's new${mark('whatsNew')}</h4><p class="rv-long">${esc(a.whatsNew)}</p></div>` : ''}
+  <div class="dr-sec"><h4>Permissions (${perms.length})${mark('permissions')}</h4>${perms.length ? `<div class="chips">${perms.map(p => `<span class="pill nd">${esc(p)}</span>`).join('')}</div>` : '<div class="muted">None declared</div>'}</div>
+  <div class="dr-sec"><h4>Links</h4><dl class="kv">${kv('Download', link(a.downloadUrl), 'downloadUrl')}${kv('Website', link(a.website), 'website')}${kv('Privacy policy', link(a.privacyPolicy), 'privacyPolicy')}${kv('YouTube', link(a.youtube), 'youtube')}${kv('Support email', esc(a.supportEmail), 'supportEmail')}</dl></div>
+  <div class="dr-sec"><h4>Developer</h4><dl class="kv">${kv('Name', esc(a.developerName || userName(a.developerUid)))}${kv('Uid', '<code>' + esc(a.developerUid || uid || '') + '</code>')}${kv('Submitted', ago(+a.submittedAt || +a.timestamp) || '—')}</dl></div>
+  </div>
+  <div class="dr-f">${act}<button class="btn" id="drClose2" style="margin-left:auto">Close</button></div></aside>`;
+  $('#drClose').onclick = closeOv; $('#drClose2').onclick = closeOv; document.onkeydown = e => { if (e.key === 'Escape') closeOv(); };
+}
+ACT.openReview = d => openReview(d.k, !!d.u || String(d.k).includes('|'));
+
+const UP_FIELDS = Object.keys(UF_LABEL).concat(['versionHistory', 'developerName']);
+async function decideUpdate(key, ok) {
+  const [uid, aid] = key.split('|'), u = (S.upd[uid] || {})[aid], a = S.apps[aid]; if (!u || !a) return;
+  if (ok && a.status === 'suspended') { toast('This app is suspended. Restore it first.', 'bad'); return; }
+  let reason = '';
+  if (!ok) { reason = await ask({ title: 'Reject this update?', text: 'The live version stays on the store. The developer is notified and emailed with your reason, and can fix the update and submit it again.', input: 'Reason shown to the developer', area: true, required: true, ok: 'Reject update' }); if (!reason) return; }
+  else if (!(await ask({ title: 'Approve this update?', text: `The new version of "${a.name}" replaces the live one after the next store update. The developer is notified and emailed.`, ok: 'Approve update' }))) return;
+  const now = Date.now(), up = {}, nm = u.name || a.name;
+  if (ok) {
+    UP_FIELDS.forEach(f => { if (u[f] !== undefined) up[`apps/${aid}/${f}`] = u[f]; });
+    up[`apps/${aid}/updatedDate`] = new Date().toISOString().split('T')[0]; up[`apps/${aid}/updateReviewedAt`] = now; up[`apps/${aid}/updateResult`] = 'approved'; up[`appUpdates/${uid}/${aid}`] = null;
+  } else { up[`appUpdates/${uid}/${aid}/status`] = 'rejected'; up[`appUpdates/${uid}/${aid}/rejectReason`] = reason.slice(0, 400); up[`appUpdates/${uid}/${aid}/reviewedAt`] = now; }
+  up[`notifications/${uid}/au_${aid.slice(-8)}_${now}`] = { type: 'appreview', appId: aid, appName: String(nm).slice(0, 100), text: ok ? `Your update for "${nm}" was approved and is now live on UptoZishu.` : `Your update for "${nm}" was not approved. The old version stays live. Please fix the issue and submit the update again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
+  try {
+    await db.ref().update(up);
+    if (ok) { UP_FIELDS.forEach(f => { if (u[f] !== undefined) a[f] = u[f]; }); a.updateReviewedAt = now; a.updateResult = 'approved'; delete S.upd[uid][aid]; } else { u.status = 'rejected'; u.rejectReason = reason; u.reviewedAt = now; }
+    logAct(ok ? 'approve' : 'reject', (ok ? 'Approved update of "' : 'Rejected update of "') + nm + '"' + (u.version ? ' (' + u.version + ')' : ''), { appId: aid, appName: nm, icon: u.icon || a.icon, note: ok ? '' : reason });
+    closeOv(); rerender(); sentAnim(ok ? 'Update approved' : 'Update rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
+    if (MAIL_ENDPOINT) { const m = await mailCall('updecision', aid); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
+  } catch (e) { fail(e); }
+}
+ACT.upApprove = d => decideUpdate(d.k, true);
+ACT.upReject = d => decideUpdate(d.k, false);
+
+/* ---------- history ---------- */
+const LOG_ICO = { approve: 'check', reject: 'x', suspend: 'pause', restore: 'play', delete: 'trash', ticket: 'chat', review: 'star', claim: 'shield', profile: 'users', report: 'flag', transfer: 'swap' };
+const LOG_TONE = { approve: 'ok', restore: 'ok', reject: 'bad', suspend: 'bad', delete: 'bad', report: 'warn', review: 'warn' };
+function vHistory() {
+  const list = Object.keys(S.logs || {}).map(id => ({ id, ...S.logs[id] })).filter(l => l && l.ts).sort((a, b) => b.ts - a.ts);
+  if (!list.length) return `<div class="empty card">${ico('clock')}<b>No history yet</b>Everything you approve, reject, suspend or reply to is saved here.</div>`;
+  const dayName = t => { const d = new Date(t), n = new Date(), y = new Date(Date.now() - 864e5); return d.toDateString() === n.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : dstr(t); };
+  let last = '', html = '';
+  list.slice(0, UI.histLimit || 60).forEach(l => {
+    const dn = dayName(l.ts); if (dn !== last) { html += `<div class="hs-day">${dn}</div>`; last = dn; }
+    const tone = LOG_TONE[l.kind] || '';
+    html += `<div class="hs-row" id="h_${esc(l.id)}"><div class="hs-ic ${tone}">${ico(LOG_ICO[l.kind] || 'clock')}</div><div class="hs-b"><b>${esc(l.text)}</b><div class="meta">${new Date(l.ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}${l.note ? ' · ' + esc(String(l.note).slice(0, 120)) : ''}</div></div><button class="hs-x" data-act="logDel" data-id="${esc(l.id)}" aria-label="Delete">${ico('x')}</button></div>`;
+  });
+  return `<div class="toolbar"><div class="grow muted" style="padding:0 6px">${list.length} saved ${list.length === 1 ? 'action' : 'actions'}</div><button class="btn sm danger" data-act="logClear">${ico('trash')}Clear all</button></div><div class="card hs">${html}</div>${list.length > (UI.histLimit || 60) ? `<div class="more"><button class="btn" data-act="logMore">Show more</button></div>` : ''}`;
+}
+ACT.logMore = () => { UI.histLimit = (UI.histLimit || 60) + 60; rerender(); };
+ACT.logDel = async d => {
+  const row = document.getElementById('h_' + d.id); if (row) row.classList.add('gone');
+  try { await db.ref(`adminLogs/${S.user.uid}/${d.id}`).remove(); delete S.logs[d.id]; setTimeout(rerender, 220); } catch (e) { if (row) row.classList.remove('gone'); fail(e); }
+};
+ACT.logClear = async () => {
+  if (!(await ask({ title: 'Clear all history?', text: 'All saved actions are deleted for good. This cannot be undone.', ok: 'Clear all', danger: true }))) return;
+  try { await db.ref(`adminLogs/${S.user.uid}`).remove(); S.logs = {}; rerender(); toast('History cleared'); } catch (e) { fail(e); }
+};
+
 /* ---------- router ---------- */
-const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast };
+const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast, history: vHistory };
 function route() { return (location.hash.replace(/^#\/?/, '').split('/')[0]) || ''; }
 function routeId() { return decodeURIComponent(location.hash.replace(/^#\/?/, '').split('/')[1] || ''); }
 function buildNav() {
-  const c = { approvals: pendingApps().length + pendingProfiles().length, reports: reportList().length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
+  const c = { approvals: pendingApps().length + pendingProfiles().length + pendingUpdates().length, reports: reportList().length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
   $('#nav').innerHTML = NAV.map(n => n[0] === 'h' ? `<div class="nav-h">${n[1]}</div>` : `<a class="nav-a ${route() === n[0] ? 'on' : ''}" href="#/${n[0]}">${ico(n[2])}<span>${n[1]}</span>${c[n[0]] ? `<span class="cnt">${c[n[0]]}</span>` : ''}</a>`).join('');
 }
 function rerender() {
