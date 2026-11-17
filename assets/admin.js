@@ -23,12 +23,12 @@ const I = {
 const avc = s => { let h = 0; s = String(s || 'G').toLowerCase(); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997; return 'c' + (h % 8); };
 const ico = n => '<svg viewBox="0 0 24 24">' + (I[n] || '') + '</svg>';
 const NAV = [
-  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Store'], ['storefront', 'Storefront', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['feedback', 'Feedback', 'inbox'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
+  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Store'], ['storefront', 'Storefront', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['feedback', 'Feedback', 'inbox'], ['ads', 'Advertisements', 'mega'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
   ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega'],
   ['h', 'You'], ['history', 'History', 'clock']
 ];
-const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History', storefront: 'Storefront', feedback: 'App feedback' };
-const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, susp: {}, sf: {}, fb: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History', storefront: 'Storefront', feedback: 'App feedback', ads: 'Advertisements' };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, susp: {}, sf: {}, ads: {}, fb: {}, fbc: {}, fbn: {}, reviews: {}, stats: {}, failed: [], loaded: false };
 const UI = { tkTab: 'wait', reply: {}, appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
@@ -72,7 +72,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('feedback', 'fb'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('adCampaigns', 'ads'), get('feedback', 'fb'), get('feedbackContact', 'fbc'), get('feedbackNotes', 'fbn'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -81,7 +81,7 @@ async function recount(appId) {
   await db.ref('apps/' + appId).update({ rating: avg, reviewCount: rs.length });
   if (S.apps[appId]) { S.apps[appId].rating = avg; S.apps[appId].reviewCount = rs.length; }
 }
-function note(uid, key, text, appId) { return uid ? { path: `notifications/${uid}/${key}`, value: { type: 'admin', appId: appId || '', text: String(text).slice(0, 280), timestamp: Date.now(), read: false } } : null; }
+function note(uid, key, text, appId) { return uid ? { path: `notifications/${uid}/${key}`, value: { type: 'admin', appId: appId || '', text: String(text).slice(0, 2000), timestamp: Date.now(), read: false } } : null; }
 function logAct(kind, text, x) {
   try {
     const ref = db.ref('adminLogs/' + S.user.uid).push(), e = Object.assign({ kind, text: String(text).slice(0, 200), ts: Date.now() }, x || {});
@@ -182,7 +182,7 @@ function vOverview() {
   const dl = apps.reduce((s, a) => s + (+a.downloadCount || 0), 0), views = apps.reduce((s, a) => s + (+a.views || 0), 0);
   const revs = allReviews(), vis = revs.filter(r => !r.hidden && r.rating), avg = vis.length ? vis.reduce((s, r) => s + (+r.rating || 0), 0) / vis.length : 0;
   const devIds = new Set([...Object.keys(S.devs), ...apps.map(a => a.developerUid).filter(Boolean)]);
-  const pc = pendingClaims().length, rp = reportList().length;
+  const pc = pendingClaims().length, rp = reportList().length, ap = pendingApps().length + pendingProfiles().length + pendingUpdates().length;
   const keys = dayKeys(UI.range), perDay = {}; Object.keys(S.stats).forEach(aid => { const d = S.stats[aid]; if (d && typeof d === 'object') Object.keys(d).forEach(k => { perDay[k] = (perDay[k] || 0) + (+d[k] || 0); }); });
   const vals = keys.map(k => perDay[k] || 0), tot = vals.reduce((a, b) => a + b, 0);
   const top = apps.slice().sort((a, b) => (+b.downloadCount || 0) - (+a.downloadCount || 0)).slice(0, 6), topMax = Math.max(1, +(top[0] && top[0].downloadCount) || 1);
@@ -195,7 +195,7 @@ function vOverview() {
   feed.sort((a, b) => b.t - a.t);
   const todo = (href, n, t, s) => `<a class="todo" href="${href}"><div class="ic fi"><span class="dot ${n ? 'warn' : 'ok'}">${ico(n ? 'clock' : 'check')}</span></div><div><b>${t}</b><span>${s}</span></div>${n ? `<span class="cnt">${n}</span>` : ''}</a>`;
   return (S.failed.length ? `<div class="item" style="border-color:rgba(251,191,36,.5);margin-bottom:16px"><b style="color:var(--warn)">Some data could not be loaded</b><div class="meta">${S.failed.map(esc).join(', ')} — publish the new Firebase rules, then press refresh.</div></div>` : '') + `
-  <div class="grid g-kpi">${kpi('apps', '', nf(apps.length), 'Total apps', `${live} live · ${drafts} draft`, '#/apps')}${kpi('dl', 'ok', nf(dl), 'Downloads', 'all time')}${kpi('eye', 'info', nf(views), 'Views', 'all time')}${kpi('star', 'warn', avg ? avg.toFixed(1) : '—', 'Average rating', nf(vis.length) + ' visible reviews', '#/reviews')}${kpi('users', 'vio', nf(Object.keys(S.users).length), 'Store users', nf(devIds.size) + ' developers', '#/users')}${kpi('pause', susp ? 'bad' : '', nf(susp), 'Suspended apps', '', '#/apps')}</div>
+  <div class="grid g-kpi">${kpi('apps', '', nf(apps.length), 'Total apps', `${live} live · ${drafts} draft`, '#/apps')}${kpi('dl', 'ok', nf(dl), 'Downloads', 'all time')}${kpi('check', ap ? 'warn' : 'ok', nf(ap), 'Approvals', ap ? 'waiting for review' : 'all clear', '#/approvals')}${kpi('flag', rp ? 'bad' : 'ok', nf(rp), 'Reports', rp ? 'open reports' : 'all clear', '#/reports')}${kpi('users', 'vio', nf(Object.keys(S.users).length), 'Store users', nf(devIds.size) + ' developers', '#/users')}${kpi('pause', susp ? 'bad' : '', nf(susp), 'Suspended apps', '', '#/apps')}</div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div><h3>Downloads</h3><div class="sub">${nf(tot)} in the last ${UI.range} days</div></div><div class="seg">${[7, 14, 30].map(n => `<button class="${UI.range === n ? 'on' : ''}" data-act="range" data-n="${n}">${n}d</button>`).join('')}</div></div>${lineChart(keys, vals)}</div>
     <div class="card"><h3>Needs attention</h3><div class="sub">Things waiting for you</div>${todo('#/claims', pc, 'Claim requests', pc ? pc + ' pending' : 'All clear')}${todo('#/reports', rp, 'Reports', rp ? rp + ' open' : 'All clear')}${todo('#/apps', susp, 'Suspended apps', susp ? 'Review them' : 'None')}</div>
@@ -291,12 +291,12 @@ function vUsers() {
   allReviews().forEach(r => { ensure(r.revId).reviews++; });
   let list = Object.values(m); const q = UI.userQ.trim().toLowerCase();
   if (q) list = list.filter(u => [u.name, u.username, u.email, u.uid].join(' ').toLowerCase().includes(q));
-  const cnt = f => Object.values(m).filter(u => f === 'all' || (f === 'dev' ? u.isDev : f === 'sus' ? S.susp[u.uid] : u.reviews)).length;
-  if (UI.userF === 'dev') list = list.filter(u => u.isDev); else if (UI.userF === 'rev') list = list.filter(u => u.reviews); else if (UI.userF === 'sus') list = list.filter(u => S.susp[u.uid]);
+  const cnt = f => Object.values(m).filter(u => f === 'all' || (f === 'dev' ? u.isDev : f === 'usr' ? !u.isDev : f === 'sus' ? S.susp[u.uid] : u.reviews)).length;
+  if (UI.userF === 'dev') list = list.filter(u => u.isDev); else if (UI.userF === 'usr') list = list.filter(u => !u.isDev); else if (UI.userF === 'rev') list = list.filter(u => u.reviews); else if (UI.userF === 'sus') list = list.filter(u => S.susp[u.uid]);
   list.sort((a, b) => (b.apps - a.apps) || (b.reviews - a.reviews) || (+b.createdAt || 0) - (+a.createdAt || 0));
   const shown = list.slice(0, 80);
   return `<div class="toolbar"><div class="grow">${ico('search')}<input id="userQ" type="search" placeholder="Search name, username, email, uid…" value="${esc(UI.userQ)}"></div></div>
-  <div class="chips" style="margin-bottom:16px">${[['all', 'Everyone'], ['dev', 'Developers'], ['rev', 'Reviewers'], ['sus', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.userF === k ? 'on' : ''}" data-act="userF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
+  <div class="chips" style="margin-bottom:16px">${[['all', 'Everyone'], ['dev', 'Developers'], ['usr', 'Users'], ['rev', 'Reviewers'], ['sus', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.userF === k ? 'on' : ''}" data-act="userF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
   <div class="table" style="--cols:minmax(0,2fr) minmax(0,1.4fr) 100px 90px 110px"><div class="tr-h"><div>Person</div><div>Email</div><div>Role</div><div>Reviews</div><div>Joined · Verify</div></div>
   ${shown.length ? shown.map(u => `<div class="tr-r" data-act="openUser" data-u="${esc(u.uid)}"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) + ((S.profiles[u.uid] || {}).verified ? ' ' + pill('ok', 'Verified') : ' ' + pill('warn', 'Unverified')) : pill('', 'User')}${S.susp[u.uid] ? ' ' + pill('bad', 'Suspended') : ''}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${u.isDev && S.profiles[u.uid] ? `<button class="btn sm ${S.profiles[u.uid].verified ? '' : 'good'}" data-act="verifyDev" data-u="${esc(u.uid)}">${S.profiles[u.uid].verified ? 'Unverify' : 'Verify'}</button>` : dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
   <div class="card" style="margin-top:16px"><h3>Add another admin</h3><div class="sub">Open Firebase → Realtime Database → add <code>admins</code> → <code>&lt;uid&gt;</code> = <code>true</code>. Removing it removes admin access immediately.</div></div>`;
@@ -306,16 +306,16 @@ ACT.userF = d => { UI.userF = d.k; rerender(); };
 function vBroadcast() {
   const targets = new Set([...Object.keys(S.devs), ...appList().map(a => a.developerUid).filter(Boolean)]);
   return `<div class="compose"><div class="card"><h3>Message all developers</h3><div class="sub">Appears in the Notifications screen of every developer's console. Reaches ${targets.size} developer${targets.size === 1 ? '' : 's'}.</div>
-  <label class="field"><span>Message</span><textarea id="bcText" maxlength="280" placeholder="e.g. We updated the store rules. Please review your app descriptions."></textarea></label>
-  <div class="actions"><button class="btn primary" data-act="sendBc">${ico('send')}Send to ${targets.size}</button><span class="muted" id="bcLen" style="align-self:center">0 / 280</span></div></div>
+  <label class="field"><span>Message</span><textarea id="bcText" maxlength="2000" placeholder="e.g. We updated the store rules. Please review your app descriptions."></textarea></label>
+  <div class="actions"><button class="btn primary" data-act="sendBc">${ico('send')}Send to ${targets.size}</button><span class="muted" id="bcLen" style="align-self:center">0 / 2000</span></div></div>
   <div class="phone"><div class="muted" style="margin-bottom:10px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-weight:700">Preview</div><div class="nt"><b>UptoZishu Admin</b><div id="bcPrev" class="muted">Your message appears here…</div></div></div></div>`;
 }
 ACT.sendBc = async () => {
   const el = $('#bcText'), text = el.value.trim(); if (text.length < 3) { el.style.borderColor = 'var(--bad)'; return; }
   const targets = [...new Set([...Object.keys(S.devs), ...appList().map(a => a.developerUid).filter(Boolean)])];
   if (!(await ask({ title: 'Send to ' + targets.length + ' developers?', text: '"' + text + '"', ok: 'Send' }))) return;
-  const up = {}, now = Date.now(); targets.forEach(u => { up[`notifications/${u}/bc_${now}`] = { type: 'admin', appId: '', text: text.slice(0, 280), timestamp: now, read: false }; });
-  try { await db.ref().update(up); el.value = ''; toast('Sent to ' + targets.length + ' developers'); $('#bcPrev').textContent = 'Your message appears here…'; $('#bcLen').textContent = '0 / 280'; } catch (e) { fail(e); }
+  const up = {}, now = Date.now(); targets.forEach(u => { up[`notifications/${u}/bc_${now}`] = { type: 'admin', appId: '', text: text.slice(0, 2000), timestamp: now, read: false }; });
+  try { await db.ref().update(up); el.value = ''; toast('Sent to ' + targets.length + ' developers'); $('#bcPrev').textContent = 'Your message appears here…'; $('#bcLen').textContent = '0 / 2000'; } catch (e) { fail(e); }
 };
 
 
@@ -625,18 +625,18 @@ ACT.usUnsuspend = async d => {
 };
 
 /* ---------- storefront: featured apps + editor's choice ---------- */
-const SF_KINDS = { featured: { title: 'Featured apps', sub: 'Shown as the big banner slides at the top of the store home page.', max: 8, auto: 'Nothing picked, so the store shows the most downloaded apps that have a feature banner.' }, editors: { title: "Editor's Choice", sub: "Shown on the Editor's Choice page and in its pill on the home page. Add as many apps as you like.", max: Infinity, auto: 'Nothing picked, so the store shows verified apps, or the best rated apps with a banner.' } };
+const SF_KINDS = { featured: { title: 'Featured apps', sub: 'Shown as the big banner slides at the top of the store home page.', max: 8, auto: 'Nothing picked, so the store shows the most downloaded apps that have a feature banner.' }, editors: { title: "Editor's Choice", sub: "Shown on the Editor's Choice page and in its pill on the home page. Add as many apps as you like.", max: Infinity, auto: 'Nothing picked, so the store shows verified apps, or the best rated apps with a banner.' }, sponsored: { title: 'Sponsored', sub: 'Shown as the Sponsored row at the top of the store home page and on the search screen (first 10). Apps added from an approved advertisement are removed automatically when their paid time ends.', max: Infinity, auto: 'Nothing picked, so no Sponsored row is shown on the store.' } };
 const sfList = k => { const v = S.sf && S.sf[k]; return (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : []).filter(id => typeof id === 'string'); };
 async function sfSave(k, arr, msg) {
-  try { await db.ref('storefront/' + k).set(arr.length ? arr : null); S.sf = Object.assign({}, S.sf || {}); if (arr.length) S.sf[k] = arr; else delete S.sf[k]; rerender(); if (msg) toast(msg); } catch (e) { fail(e); }
+  try { const un = S.sf && S.sf[k + 'Until']; if (un && typeof un === 'object') { const up = {}; up['storefront/' + k] = arr.length ? arr : null; Object.keys(un).forEach(id => { if (!arr.includes(id)) { up['storefront/' + k + 'Until/' + id] = null; delete un[id]; } }); await db.ref().update(up); } else await db.ref('storefront/' + k).set(arr.length ? arr : null); S.sf = Object.assign({}, S.sf || {}); if (arr.length) S.sf[k] = arr; else delete S.sf[k]; rerender(); if (msg) toast(msg); } catch (e) { fail(e); }
 }
 function vStorefront() {
-  const k = UI.sfTab === 'editors' ? 'editors' : 'featured', m = SF_KINDS[k], ids = sfList(k), cap = m.max === Infinity ? '' : ' / ' + m.max;
+  const k = SF_KINDS[UI.sfTab] ? UI.sfTab : 'featured', m = SF_KINDS[k], ids = sfList(k), cap = m.max === Infinity ? '' : ' / ' + m.max;
   const tabs = `<div class="chips" style="margin-bottom:16px">${Object.keys(SF_KINDS).map(t => `<button class="chip ${k === t ? 'on' : ''}" data-act="sfTab" data-t="${t}">${SF_KINDS[t].title} · ${sfList(t).length}</button>`).join('')}</div>`;
   const rows = ids.map((id, i) => {
     const a = S.apps[id];
     const warn = !a ? pill('bad', 'App deleted') : stat(a) !== 'live' ? pill('warn', 'Not live, hidden') : (k === 'featured' && !a.banner ? pill('nd', 'No banner') : '');
-    return `<div class="hs-row"><div class="sf-n">${i + 1}</div>${a ? `<img class="ico" style="width:42px;height:42px;border-radius:11px" src="${esc(a.icon || ICON)}" alt="">` : '<div class="ico" style="width:42px;height:42px"></div>'}<div class="hs-b"><b>${esc(a ? a.name : 'Unknown app')}</b><div class="meta">${esc(a ? (a.developerName || '') + (a.version ? ' · ' + a.version : '') : id)} ${warn}</div></div>
+    return `<div class="hs-row sf-c"><div class="sf-n">${i + 1}</div>${a ? `<img class="ico" style="width:38px;height:38px;border-radius:10px" src="${esc(a.icon || ICON)}" alt="">` : '<div class="ico" style="width:38px;height:38px"></div>'}<div class="hs-b"><b>${esc(a ? a.name : 'Unknown app')}</b><div class="meta">${esc(a ? (a.developerName || '') + (a.version ? ' · ' + a.version : '') : id)} ${warn}</div></div>
     <button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="-1" ${i === 0 ? 'disabled style="opacity:.3"' : ''} aria-label="Move up">${ico('up')}</button><button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="1" ${i === ids.length - 1 ? 'disabled style="opacity:.3"' : ''} aria-label="Move down">${ico('down')}</button><button class="hs-x" data-act="sfRemove" data-k="${k}" data-i="${i}" aria-label="Remove">${ico('x')}</button></div>`;
   }).join('');
   return `<div class="muted" style="margin-bottom:14px">Changes appear on the store after the next rebuild (about 10 minutes). Only live apps are shown, others are skipped automatically.</div>${tabs}
@@ -674,6 +674,61 @@ ACT.sfAdd = d => {
   $('#drClose').onclick = closeOv; document.onkeydown = e => { if (e.key === 'Escape') closeOv(); };
 };
 
+
+/* ---------- paid advertisements (Sponsored or Featured) ---------- */
+const adList = () => Object.keys(S.ads || {}).map(id => ({ id, ...S.ads[id] })).filter(c => c && c.submittedAt).sort((a, b) => b.submittedAt - a.submittedAt);
+const AD_NAME = { sponsored: 'Sponsored', featured: 'Featured' };
+const inr = n => '₹' + (+n || 0).toLocaleString('en-IN');
+const adDay = t => t ? new Date(+t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+function vAds() {
+  const all = adList(), tab = UI.adTab || 'pending', cnt = t => all.filter(c => t === 'all' || c.status === t).length;
+  const tabs = `<div class="chips" style="margin-bottom:14px">${[['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['all', 'All']].map(([t, n]) => `<button class="chip ${tab === t ? 'on' : ''}" data-act="adTab" data-t="${t}">${n} · ${cnt(t)}</button>`).join('')}</div>`;
+  const list = all.filter(c => tab === 'all' || c.status === tab);
+  const intro = `<div class="muted" style="margin-bottom:14px">Check the payment screenshot, UTR and amount against your UPI app (7654613259@fam). Approving adds the app to the Sponsored or Featured list of the store for the paid months. Rejecting needs a reason.</div>`;
+  if (!list.length) return intro + tabs + `<div class="empty card">${ico('mega')}<b>Nothing here</b>Advertisement requests from developers show up here.</div>`;
+  return intro + tabs + '<div class="stack">' + list.map(c => {
+    const a = S.apps[c.appId] || {}, st = c.status, tone = st === 'approved' ? 'ok' : st === 'rejected' ? 'bad' : 'warn';
+    const warn = !S.apps[c.appId] ? pill('bad', 'App deleted') : stat(a) !== 'live' ? pill('warn', 'App not live') : (c.plan === 'featured' && !a.banner ? pill('nd', 'No banner') : '');
+    return `<div class="item"><div class="item-h"><img class="ico" src="${esc(c.appIcon || a.icon || ICON)}" alt=""><div class="grow"><b>${esc(c.appName || a.name || 'App')}</b><div class="meta">${esc(AD_NAME[c.plan] || c.plan)} · ${c.months} month${c.months > 1 ? 's' : ''} · <b>${inr(c.amount)}</b> · ${ago(+c.submittedAt)} ${warn}</div></div>${pill(tone, st)}</div>
+    <table class="difft" style="margin:10px 0"><tbody>
+    <tr><td class="muted">Name</td><td>${esc(c.name)}</td></tr><tr><td class="muted">Phone</td><td>${esc(c.phone)}</td></tr><tr><td class="muted">Email</td><td>${esc(c.email)}</td></tr>
+    <tr><td class="muted">UTR</td><td><b>${esc(c.utr)}</b></td></tr><tr><td class="muted">Paid on</td><td>${esc(c.paidOn)}</td></tr>${c.note ? `<tr><td class="muted">Note</td><td>${esc(c.note)}</td></tr>` : ''}
+    ${st === 'approved' ? `<tr><td class="muted">Live</td><td>${adDay(c.startsAt)} → ${adDay(c.endsAt)}</td></tr>` : ''}${st === 'rejected' ? `<tr><td class="muted">Reason</td><td>${esc(c.rejectReason || '')}</td></tr>` : ''}</tbody></table>
+    ${isImg(c.shot) ? `<div class="shots"><a href="${esc(c.shot)}" target="_blank" rel="noopener"><span>1</span><img src="${esc(c.shot)}" alt="Payment screenshot"></a></div>` : '<div class="meta">No screenshot</div>'}
+    ${st === 'pending' ? `<div class="actions" style="margin-top:12px"><button class="btn sm good" data-act="adApprove" data-id="${esc(c.id)}">${ico('check')}Verify and approve</button><button class="btn sm danger" data-act="adReject" data-id="${esc(c.id)}">${ico('x')}Reject</button></div>` : ''}</div>`;
+  }).join('') + '</div>';
+}
+ACT.adTab = d => { UI.adTab = d.t; rerender(); };
+ACT.adApprove = async d => {
+  const c = S.ads[d.id]; if (!c || c.status !== 'pending') return;
+  const a = S.apps[c.appId]; if (!a) { toast('This app was deleted, reject the request instead', 'bad'); return; }
+  const k = c.plan === 'featured' ? 'featured' : 'sponsored', list = sfList(k), until = Object.assign({}, (S.sf && S.sf[k + 'Until']) || {}), now = Date.now();
+  const base = list.includes(c.appId) && +until[c.appId] > now ? +until[c.appId] : now, end = base + (+c.months || 1) * 30 * 864e5;
+  if (!(await ask({ title: 'Approve this advertisement?', text: `${a.name} goes into the ${AD_NAME[k]} list until ${adDay(end)}. Make sure ${inr(c.amount)} with UTR ${c.utr} is in your UPI account.` + (k === 'featured' && list.length >= 8 ? ' The Featured list already has 8 or more apps, the store shows only the first 8.' : ''), ok: 'Approve' }))) return;
+  if (!list.includes(c.appId)) list.push(c.appId); until[c.appId] = end;
+  const up = {}; up['storefront/' + k] = list; up['storefront/' + k + 'Until/' + c.appId] = end;
+  Object.assign(up, { [`adCampaigns/${d.id}/status`]: 'approved', [`adCampaigns/${d.id}/reviewedAt`]: now, [`adCampaigns/${d.id}/startsAt`]: base, [`adCampaigns/${d.id}/endsAt`]: end, [`adCampaigns/${d.id}/reviewedBy`]: S.user.uid });
+  const n = note(c.uid, 'ad_' + now, `Your ${AD_NAME[k]} advertisement for "${a.name}" is approved. It is live in the store until ${adDay(end)} (the store updates within about 10 minutes).`, c.appId); if (n) up[n.path] = n.value;
+  try {
+    await db.ref().update(up); S.sf = Object.assign({}, S.sf || {}); S.sf[k] = list; S.sf[k + 'Until'] = until; Object.assign(S.ads[d.id], { status: 'approved', reviewedAt: now, startsAt: base, endsAt: end });
+    logAct('store', `Approved ${AD_NAME[k]} ad for ${a.name}`, { appId: c.appId, appName: a.name, icon: a.icon }); rerender();
+    sentAnim('Advertisement approved', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
+    if (MAIL_ENDPOINT) { const m = await mailCall('addecision', d.id); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
+  } catch (e) { fail(e); }
+};
+ACT.adReject = async d => {
+  const c = S.ads[d.id]; if (!c || c.status !== 'pending') return;
+  const why = await ask({ title: 'Reject this advertisement?', text: 'The developer is told the reason.', input: 'Reason (shown to the developer)', value: '', area: true, ok: 'Reject', danger: true, required: true }); if (why === null || !String(why).trim()) return;
+  const now = Date.now(), up = { [`adCampaigns/${d.id}/status`]: 'rejected', [`adCampaigns/${d.id}/reviewedAt`]: now, [`adCampaigns/${d.id}/rejectReason`]: String(why).trim().slice(0, 400), [`adCampaigns/${d.id}/reviewedBy`]: S.user.uid };
+  const n = note(c.uid, 'ad_' + now, `Your ${AD_NAME[c.plan] || ''} advertisement for "${c.appName}" was rejected. Reason: ${String(why).trim()}`, c.appId); if (n) up[n.path] = n.value;
+  try {
+    await db.ref().update(up); Object.assign(S.ads[d.id], { status: 'rejected', reviewedAt: now, rejectReason: String(why).trim().slice(0, 400) });
+    logAct('reject', 'Rejected ad for ' + c.appName, { appId: c.appId, appName: c.appName, note: String(why).slice(0, 150) }); rerender();
+    sentAnim('Advertisement rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
+    if (MAIL_ENDPOINT) { const m = await mailCall('addecision', d.id); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
+  } catch (e) { fail(e); }
+};
+
 /* ---------- app feedback from store users ---------- */
 const fbList = () => Object.keys(S.fb || {}).map(id => ({ id, ...S.fb[id] })).filter(f => f && f.ts).sort((a, b) => b.ts - a.ts);
 const FB_TABS = [['new', 'New'], ['reviewed', 'Reviewed'], ['archived', 'Archived'], ['all', 'All']];
@@ -696,8 +751,8 @@ function vFeedback() {
     <p class="body" style="white-space:pre-wrap;word-break:break-word">${esc(f.message)}</p>
     ${f.device || f.appVersion ? `<div class="meta">${esc([f.device, f.appVersion ? 'App ' + f.appVersion : ''].filter(Boolean).join(' · '))}</div>` : ''}
     ${imgs.length ? `<div class="shots" style="margin-top:10px">${imgs.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><span>${i + 1}</span><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : ''}
-    ${f.adminNote ? `<div class="meta" style="margin-top:8px">Your note: ${esc(f.adminNote)}</div>` : ''}
-    <div class="actions" style="margin-top:12px">${st !== 'reviewed' ? `<button class="btn sm good" data-act="fbSet" data-id="${esc(f.id)}" data-st="reviewed">${ico('check')}Mark reviewed</button>` : ''}${st !== 'archived' ? `<button class="btn sm" data-act="fbSet" data-id="${esc(f.id)}" data-st="archived">${ico('inbox')}Archive</button>` : ''}${st !== 'new' ? `<button class="btn sm" data-act="fbSet" data-id="${esc(f.id)}" data-st="new">Mark new</button>` : ''}<button class="btn sm" data-act="fbNote" data-id="${esc(f.id)}">Note</button>${f.contactOk && f.email ? `<a class="btn sm" href="mailto:${esc(f.email)}?subject=${encodeURIComponent('Your feedback about ' + (f.appName || 'an app'))}">${ico('send')}Email</a>` : ''}${a.name ? `<button class="btn sm" data-act="openApp" data-id="${esc(f.appId)}">Open app</button>` : ''}<button class="btn sm danger" data-act="fbDel" data-id="${esc(f.id)}">${ico('trash')}Delete</button></div></div>`;
+    ${S.fbn[f.id] ? `<div class="meta" style="margin-top:8px">Your note: ${esc(S.fbn[f.id])}</div>` : ''}
+    <div class="actions" style="margin-top:12px">${st !== 'reviewed' ? `<button class="btn sm good" data-act="fbSet" data-id="${esc(f.id)}" data-st="reviewed">${ico('check')}Mark reviewed</button>` : ''}${st !== 'archived' ? `<button class="btn sm" data-act="fbSet" data-id="${esc(f.id)}" data-st="archived">${ico('inbox')}Archive</button>` : ''}${st !== 'new' ? `<button class="btn sm" data-act="fbSet" data-id="${esc(f.id)}" data-st="new">Mark new</button>` : ''}<button class="btn sm" data-act="fbNote" data-id="${esc(f.id)}">Note</button>${f.contactOk && (S.fbc[f.id] || {}).email ? `<a class="btn sm" href="mailto:${esc(S.fbc[f.id].email)}?subject=${encodeURIComponent('Your feedback about ' + (f.appName || 'an app'))}">${ico('send')}Email</a>` : ''}${a.name ? `<button class="btn sm" data-act="openApp" data-id="${esc(f.appId)}">Open app</button>` : ''}<button class="btn sm danger" data-act="fbDel" data-id="${esc(f.id)}">${ico('trash')}Delete</button></div></div>`;
   }).join('') + '</div>' + (list.length > (UI.fbLimit || 40) ? '<div class="more"><button class="btn" data-act="fbMore">Show more</button></div>' : '');
 }
 ACT.fbTab = d => { UI.fbTab = d.t; UI.fbLimit = 40; rerender(); };
@@ -708,21 +763,21 @@ ACT.fbSet = async d => {
 };
 ACT.fbNote = async d => {
   const f = S.fb[d.id]; if (!f) return;
-  const v = await ask({ title: 'Private note', text: 'Only admins see this note.', input: 'Note', value: f.adminNote || '', area: true, ok: 'Save note' }); if (v === null) return;
-  try { await db.ref('feedback/' + d.id + '/adminNote').set(v.trim().slice(0, 500) || null); if (v.trim()) f.adminNote = v.trim().slice(0, 500); else delete f.adminNote; rerender(); toast('Note saved'); } catch (e) { fail(e); }
+  const v = await ask({ title: 'Private note', text: 'Only admins see this note.', input: 'Note', value: S.fbn[d.id] || '', area: true, ok: 'Save note' }); if (v === null) return;
+  try { await db.ref('feedbackNotes/' + d.id).set(v.trim().slice(0, 500) || null); if (v.trim()) S.fbn[d.id] = v.trim().slice(0, 500); else delete S.fbn[d.id]; rerender(); toast('Note saved'); } catch (e) { fail(e); }
 };
 ACT.fbDel = async d => {
   const f = S.fb[d.id]; if (!f) return;
   if (!(await ask({ title: 'Delete this feedback?', text: 'It is removed for good. This cannot be undone.', ok: 'Delete', danger: true }))) return;
-  try { await db.ref('feedback/' + d.id).remove(); delete S.fb[d.id]; logAct('delete', 'Deleted feedback on "' + (f.appName || 'app') + '"', { appId: f.appId, appName: f.appName }); rerender(); toast('Feedback deleted'); } catch (e) { fail(e); }
+  try { const dl = {}; dl['feedback/' + d.id] = null; dl['feedbackContact/' + d.id] = null; dl['feedbackNotes/' + d.id] = null; if (f.appId) dl['appFeedback/' + f.appId + '/' + d.id] = null; await db.ref().update(dl); delete S.fb[d.id]; delete S.fbc[d.id]; delete S.fbn[d.id]; logAct('delete', 'Deleted feedback on "' + (f.appName || 'app') + '"', { appId: f.appId, appName: f.appName }); rerender(); toast('Feedback deleted'); } catch (e) { fail(e); }
 };
 
 /* ---------- router ---------- */
-const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast, history: vHistory, storefront: vStorefront, feedback: vFeedback };
+const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast, history: vHistory, storefront: vStorefront, feedback: vFeedback, ads: vAds };
 function route() { return (location.hash.replace(/^#\/?/, '').split('/')[0]) || ''; }
 function routeId() { return decodeURIComponent(location.hash.replace(/^#\/?/, '').split('/')[1] || ''); }
 function buildNav() {
-  const c = { approvals: pendingApps().length + pendingProfiles().length + pendingUpdates().length, reports: reportList().length, feedback: fbList().filter(f => f.status === 'new').length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
+  const c = { approvals: pendingApps().length + pendingProfiles().length + pendingUpdates().length, reports: reportList().length, feedback: fbList().filter(f => f.status === 'new').length, claims: pendingClaims().length, ads: adList().filter(c => c.status === 'pending').length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
   $('#nav').innerHTML = NAV.map(n => n[0] === 'h' ? `<div class="nav-h">${n[1]}</div>` : `<a class="nav-a ${route() === n[0] ? 'on' : ''}" href="#/${n[0]}">${ico(n[2])}<span>${n[1]}</span>${c[n[0]] ? `<span class="cnt">${c[n[0]]}</span>` : ''}</a>`).join('');
 }
 function rerender() {
@@ -739,7 +794,7 @@ function bindView() {
   on('fbQ', e => { UI.fbQ = e.target.value; UI.fbLimit = 40; rerender(); }); on('fbType', e => { UI.fbType = e.target.value; rerender(); }); on('appQ', e => { UI.appQ = e.target.value; UI.appLimit = 40; rerender(); }); on('revQ', e => { UI.revQ = e.target.value; UI.revLimit = 30; rerender(); }); on('userQ', e => { UI.userQ = e.target.value; rerender(); });
   const s = $('#appSort'); if (s) s.onchange = e => { UI.appSort = e.target.value; rerender(); };
   const tt = $('#tkText'); if (tt) tt.addEventListener('input', () => { UI.reply[routeId()] = tt.value; });
-  const bt = $('#bcText'); if (bt) bt.addEventListener('input', () => { $('#bcLen').textContent = bt.value.length + ' / 280'; $('#bcPrev').textContent = bt.value || 'Your message appears here…'; });
+  const bt = $('#bcText'); if (bt) bt.addEventListener('input', () => { $('#bcLen').textContent = bt.value.length + ' / 2000'; $('#bcPrev').textContent = bt.value || 'Your message appears here…'; });
 }
 window.addEventListener('hashchange', () => { closeOv(); navOpen(false); rerender(); window.scrollTo(0, 0); });
 
