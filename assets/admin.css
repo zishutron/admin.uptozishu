@@ -268,3 +268,12 @@ a.tk-row{display:block;color:inherit;text-decoration:none;transition:border-colo
 .sf-pick>svg{width:20px;height:20px;stroke:var(--ok);fill:none;stroke-width:2.2;stroke-linecap:round}
 .hs-x[disabled]{cursor:default}
 .tr-r[data-act=openUser]{cursor:pointer}
+
+/* multi-select picker + feedback */
+.sf-pick>svg{display:none}
+.sf-tg{flex:0 0 32px;height:32px;border-radius:50%;display:grid;place-items:center;border:1.5px solid var(--line2,var(--line));color:var(--mut);font-style:normal;transition:background .15s,color .15s,border-color .15s,transform .15s}
+.sf-tg svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.sf-pick.on{background:rgba(52,211,153,.08)}
+.sf-pick.on .sf-tg{background:var(--ok);border-color:var(--ok);color:#fff;transform:scale(1.05)}
+.fb-st{color:#f59e0b;letter-spacing:1px}.fb-st i{font-style:normal;color:var(--line2,var(--line))}
+.sel{height:44px;border-radius:12px;border:1px solid var(--line);background:var(--panel2,var(--bg2));color:inherit;padding:0 12px;font:inherit}

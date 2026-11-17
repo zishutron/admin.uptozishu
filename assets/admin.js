@@ -23,12 +23,12 @@ const I = {
 const avc = s => { let h = 0; s = String(s || 'G').toLowerCase(); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 997; return 'c' + (h % 8); };
 const ico = n => '<svg viewBox="0 0 24 24">' + (I[n] || '') + '</svg>';
 const NAV = [
-  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Store'], ['storefront', 'Storefront', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
+  ['', 'Overview', 'home'], ['apps', 'Apps', 'apps'], ['reviews', 'Reviews', 'star'], ['h', 'Store'], ['storefront', 'Storefront', 'star'], ['h', 'Moderation'], ['approvals', 'Approvals', 'check'], ['feedback', 'Feedback', 'inbox'], ['reports', 'Reports', 'flag'], ['claims', 'Claims', 'shield'], ['tickets', 'Support tickets', 'chat'],
   ['h', 'People'], ['users', 'Users & developers', 'users'], ['broadcast', 'Broadcast', 'mega'],
   ['h', 'You'], ['history', 'History', 'clock']
 ];
-const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History', storefront: 'Storefront' };
-const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, susp: {}, sf: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History', storefront: 'Storefront', feedback: 'App feedback' };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, susp: {}, sf: {}, fb: {}, reviews: {}, stats: {}, failed: [], loaded: false };
 const UI = { tkTab: 'wait', reply: {}, appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
@@ -72,7 +72,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('feedback', 'fb'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -298,7 +298,7 @@ function vUsers() {
   return `<div class="toolbar"><div class="grow">${ico('search')}<input id="userQ" type="search" placeholder="Search name, username, email, uid…" value="${esc(UI.userQ)}"></div></div>
   <div class="chips" style="margin-bottom:16px">${[['all', 'Everyone'], ['dev', 'Developers'], ['rev', 'Reviewers'], ['sus', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.userF === k ? 'on' : ''}" data-act="userF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
   <div class="table" style="--cols:minmax(0,2fr) minmax(0,1.4fr) 100px 90px 110px"><div class="tr-h"><div>Person</div><div>Email</div><div>Role</div><div>Reviews</div><div>Joined · Verify</div></div>
-  ${shown.length ? shown.map(u => `<div class="tr-r" data-act="openUser" data-u="${esc(u.uid)}"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) + ((S.profiles[u.uid] || {}).verified ? ' ' + pill('ok', 'Verified') : ' ' + pill('nd', 'Unverified')) : pill('', 'User')}${S.susp[u.uid] ? ' ' + pill('bad', 'Suspended') : ''}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${u.isDev && S.profiles[u.uid] ? `<button class="btn sm ${S.profiles[u.uid].verified ? '' : 'good'}" data-act="verifyDev" data-u="${esc(u.uid)}">${S.profiles[u.uid].verified ? 'Unverify' : 'Verify'}</button>` : dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
+  ${shown.length ? shown.map(u => `<div class="tr-r" data-act="openUser" data-u="${esc(u.uid)}"><div class="cell who"><div class="avatar ${avc(u.username || u.name)}" style="width:36px;height:36px;border-radius:50%">${esc((u.name || '?')[0].toUpperCase())}</div><div><b>${esc(u.name || 'Unnamed')}</b><small>${u.username ? '@' + esc(u.username) : esc(u.uid)}</small></div></div><div class="cell hide-m"><span>${esc(u.email || '—')}</span></div><div class="cell">${u.isDev ? pill('vio', u.apps + (u.apps === 1 ? ' app' : ' apps')) + ((S.profiles[u.uid] || {}).verified ? ' ' + pill('ok', 'Verified') : ' ' + pill('warn', 'Unverified')) : pill('', 'User')}${S.susp[u.uid] ? ' ' + pill('bad', 'Suspended') : ''}</div><div class="cell hide-m">${u.reviews}</div><div class="cell hide-m">${u.isDev && S.profiles[u.uid] ? `<button class="btn sm ${S.profiles[u.uid].verified ? '' : 'good'}" data-act="verifyDev" data-u="${esc(u.uid)}">${S.profiles[u.uid].verified ? 'Unverify' : 'Verify'}</button>` : dstr(+u.createdAt)}</div></div>`).join('') : `<div class="empty">${ico('users')}<b>No people found</b></div>`}</div>
   <div class="card" style="margin-top:16px"><h3>Add another admin</h3><div class="sub">Open Firebase → Realtime Database → add <code>admins</code> → <code>&lt;uid&gt;</code> = <code>true</code>. Removing it removes admin access immediately.</div></div>`;
 }
 ACT.userF = d => { UI.userF = d.k; rerender(); };
@@ -585,7 +585,7 @@ function openUser(uid) {
   UI.openId = null; ov.className = 'overlay'; ov.hidden = false;
   ov.innerHTML = `<aside class="drawer"><div class="dr-h"><div class="avatar ${avc(un || name)}" style="width:44px;height:44px;border-radius:50%">${esc(name[0].toUpperCase())}</div><div class="grow"><h3>${esc(name)}</h3><div class="muted">${un ? '@' + esc(un) : esc(uid)}</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div>
   <div class="dr-b">
-  <div class="dr-sec"><div class="chips">${isDev ? pill('vio', 'Developer') : pill('', 'User')}${isDev ? (p.verified ? pill('ok', 'Verified') : pill('nd', 'Unverified')) : ''}${sp ? pill('bad', 'Suspended') : pill('ok', 'Active')}${self ? pill('info', 'You') : ''}</div>${sp ? `<div class="meta" style="margin-top:10px">Suspended ${ago(+sp.at)}. Reason: ${esc(sp.reason || '—')}</div>` : ''}</div>
+  <div class="dr-sec"><div class="chips">${isDev ? pill('vio', 'Developer') : pill('', 'User')}${isDev ? (p.verified ? pill('ok', 'Verified') : pill('warn', 'Unverified')) : ''}${sp ? pill('bad', 'Suspended') : pill('ok', 'Active')}${self ? pill('info', 'You') : ''}</div>${sp ? `<div class="meta" style="margin-top:10px">Suspended ${ago(+sp.at)}. Reason: ${esc(sp.reason || '—')}</div>` : ''}</div>
   <div class="dr-sec"><h4>Account</h4><dl class="kv">${kv('Email', esc(d.email || u.email || ''))}${kv('Uid', '<code>' + esc(uid) + '</code>')}${kv('Joined', dstr(+u.createdAt || +p.createdAt))}${kv('Apps', apps.length)}${kv('Reviews written', revs)}${kv('Country', esc(p.location || d.country || ''))}</dl></div>
   ${isDev ? `<div class="dr-sec"><h4>Developer badge</h4><p class="muted" style="margin-bottom:10px">${p.name ? 'The badge shows on their store developer page and on every app they publish.' : 'This developer has not finished their profile yet, so they cannot be verified.'}</p><button class="btn ${p.verified ? '' : 'good'}" ${p.name ? '' : 'disabled'} data-act="usVerify" data-u="${esc(uid)}">${ico('check')}${p.verified ? 'Remove verified badge' : 'Verify developer'}</button></div>
   <div class="dr-sec"><h4>Apps (${apps.length})</h4>${apps.length ? apps.slice(0, 12).map(a => `<div class="item-h" style="padding:8px 0"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><b>${esc(a.name)}</b><div class="meta">${esc(a.version || '')}</div></div>${statPill(a)}<button class="btn sm" data-act="openApp" data-id="${esc(a.id)}">Open</button></div>`).join('') : '<div class="muted">No apps</div>'}</div>` : ''}
@@ -625,44 +625,104 @@ ACT.usUnsuspend = async d => {
 };
 
 /* ---------- storefront: featured apps + editor's choice ---------- */
-const SF_KINDS = { featured: { title: 'Featured apps', sub: 'Shown as the big banner slides at the top of the store home page.', max: 8, auto: 'Nothing picked, so the store shows the most downloaded apps that have a feature banner.' }, editors: { title: "Editor's Choice", sub: "Shown on the Editor's Choice page and in its pill on the home page.", max: 24, auto: 'Nothing picked, so the store shows verified apps, or the best rated apps with a banner.' } };
+const SF_KINDS = { featured: { title: 'Featured apps', sub: 'Shown as the big banner slides at the top of the store home page.', max: 8, auto: 'Nothing picked, so the store shows the most downloaded apps that have a feature banner.' }, editors: { title: "Editor's Choice", sub: "Shown on the Editor's Choice page and in its pill on the home page. Add as many apps as you like.", max: Infinity, auto: 'Nothing picked, so the store shows verified apps, or the best rated apps with a banner.' } };
 const sfList = k => { const v = S.sf && S.sf[k]; return (Array.isArray(v) ? v : v && typeof v === 'object' ? Object.values(v) : []).filter(id => typeof id === 'string'); };
 async function sfSave(k, arr, msg) {
   try { await db.ref('storefront/' + k).set(arr.length ? arr : null); S.sf = Object.assign({}, S.sf || {}); if (arr.length) S.sf[k] = arr; else delete S.sf[k]; rerender(); if (msg) toast(msg); } catch (e) { fail(e); }
 }
 function vStorefront() {
-  const sec = k => {
-    const m = SF_KINDS[k], ids = sfList(k);
-    const rows = ids.map((id, i) => {
-      const a = S.apps[id];
-      const warn = !a ? pill('bad', 'App deleted') : stat(a) !== 'live' ? pill('warn', 'Not live, hidden') : (k === 'featured' && !a.banner ? pill('nd', 'No banner') : '');
-      return `<div class="hs-row"><div class="sf-n">${i + 1}</div>${a ? `<img class="ico" style="width:42px;height:42px;border-radius:11px" src="${esc(a.icon || ICON)}" alt="">` : '<div class="ico" style="width:42px;height:42px"></div>'}<div class="hs-b"><b>${esc(a ? a.name : 'Unknown app')}</b><div class="meta">${esc(a ? (a.developerName || '') + (a.version ? ' · ' + a.version : '') : id)} ${warn}</div></div>
-      <button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="-1" ${i === 0 ? 'disabled style="opacity:.3"' : ''} aria-label="Move up">${ico('up')}</button><button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="1" ${i === ids.length - 1 ? 'disabled style="opacity:.3"' : ''} aria-label="Move down">${ico('down')}</button><button class="hs-x" data-act="sfRemove" data-k="${k}" data-i="${i}" aria-label="Remove">${ico('x')}</button></div>`;
-    }).join('');
-    return `<div class="card" style="margin-bottom:18px;padding:0"><div style="padding:18px 18px 8px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div class="grow"><h3>${m.title} <span class="muted" style="font-weight:500">${ids.length} / ${m.max}</span></h3><div class="sub">${m.sub}</div></div><button class="btn primary" data-act="sfAdd" data-k="${k}" ${ids.length >= m.max ? 'disabled' : ''}>${ico('plus')}Add app</button></div>
-    ${rows ? `<div class="hs">${rows}</div>` : `<div class="empty" style="padding:26px 18px">${ico('star')}<b>Automatic</b>${m.auto}</div>`}</div>`;
-  };
-  return `<div class="muted" style="margin-bottom:16px">Changes appear on the store after the next rebuild (about 10 minutes). Only live apps are shown, others are skipped automatically.</div>` + sec('featured') + sec('editors');
+  const k = UI.sfTab === 'editors' ? 'editors' : 'featured', m = SF_KINDS[k], ids = sfList(k), cap = m.max === Infinity ? '' : ' / ' + m.max;
+  const tabs = `<div class="chips" style="margin-bottom:16px">${Object.keys(SF_KINDS).map(t => `<button class="chip ${k === t ? 'on' : ''}" data-act="sfTab" data-t="${t}">${SF_KINDS[t].title} · ${sfList(t).length}</button>`).join('')}</div>`;
+  const rows = ids.map((id, i) => {
+    const a = S.apps[id];
+    const warn = !a ? pill('bad', 'App deleted') : stat(a) !== 'live' ? pill('warn', 'Not live, hidden') : (k === 'featured' && !a.banner ? pill('nd', 'No banner') : '');
+    return `<div class="hs-row"><div class="sf-n">${i + 1}</div>${a ? `<img class="ico" style="width:42px;height:42px;border-radius:11px" src="${esc(a.icon || ICON)}" alt="">` : '<div class="ico" style="width:42px;height:42px"></div>'}<div class="hs-b"><b>${esc(a ? a.name : 'Unknown app')}</b><div class="meta">${esc(a ? (a.developerName || '') + (a.version ? ' · ' + a.version : '') : id)} ${warn}</div></div>
+    <button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="-1" ${i === 0 ? 'disabled style="opacity:.3"' : ''} aria-label="Move up">${ico('up')}</button><button class="hs-x" data-act="sfMove" data-k="${k}" data-i="${i}" data-dir="1" ${i === ids.length - 1 ? 'disabled style="opacity:.3"' : ''} aria-label="Move down">${ico('down')}</button><button class="hs-x" data-act="sfRemove" data-k="${k}" data-i="${i}" aria-label="Remove">${ico('x')}</button></div>`;
+  }).join('');
+  return `<div class="muted" style="margin-bottom:14px">Changes appear on the store after the next rebuild (about 10 minutes). Only live apps are shown, others are skipped automatically.</div>${tabs}
+  <div class="card" style="padding:0"><div style="padding:18px 18px 8px;display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap"><div class="grow"><h3>${m.title} <span class="muted" style="font-weight:500">${ids.length}${cap}</span></h3><div class="sub">${m.sub}</div></div><button class="btn primary" data-act="sfAdd" data-k="${k}">${ico('plus')}Add apps</button></div>
+  ${rows ? `<div class="hs">${rows}</div>` : `<div class="empty" style="padding:26px 18px">${ico('star')}<b>Automatic</b>${m.auto}</div>`}</div>`;
 }
+ACT.sfTab = d => { UI.sfTab = d.t; rerender(); };
 ACT.sfRemove = async d => { const arr = sfList(d.k); const id = arr[+d.i]; if (id === undefined) return; arr.splice(+d.i, 1); logAct('store', 'Removed "' + ((S.apps[id] || {}).name || 'app') + '" from ' + SF_KINDS[d.k].title, { appId: id, appName: (S.apps[id] || {}).name, icon: (S.apps[id] || {}).icon }); await sfSave(d.k, arr, 'Removed'); };
 ACT.sfMove = async d => { const arr = sfList(d.k), i = +d.i, j = i + (+d.dir); if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; await sfSave(d.k, arr); };
 ACT.sfAdd = d => {
-  const k = d.k, m = SF_KINDS[k], have = new Set(sfList(k));
-  const pool = appList().filter(a => stat(a) === 'live' && !have.has(a.id)).sort((x, y) => (x.name || '').localeCompare(y.name || ''));
+  const k = d.k, m = SF_KINDS[k], start = sfList(k), sel = new Set(start);
+  const pool = appList().filter(a => stat(a) === 'live' || sel.has(a.id)).sort((x, y) => (x.name || '').localeCompare(y.name || ''));
   UI.openId = null; ov.className = 'overlay'; ov.hidden = false;
-  ov.innerHTML = `<aside class="drawer"><div class="dr-h"><div class="grow"><h3>Add to ${esc(m.title)}</h3><div class="muted">Pick a live app</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div><div class="dr-b"><div class="toolbar"><div class="grow">${ico('search')}<input id="sfQ" type="search" placeholder="Search apps" autocomplete="off"></div></div><div id="sfPool"></div></div></aside>`;
-  const draw = () => { const q = $('#sfQ').value.trim().toLowerCase(); const l = pool.filter(a => !q || [a.name, a.developerName, a.category].join(' ').toLowerCase().includes(q)); $('#sfPool').innerHTML = l.length ? l.map(a => `<button class="sf-pick" data-id="${esc(a.id)}"><img class="ico" style="width:42px;height:42px;border-radius:11px" src="${esc(a.icon || ICON)}" alt=""><span><b>${esc(a.name)}</b><small>${esc(a.developerName || '')}${k === 'featured' && !a.banner ? ' · no banner' : ''}</small></span>${ico('plus')}</button>`).join('') : '<div class="empty">' + ico('search') + '<b>No apps found</b></div>'; };
+  ov.innerHTML = `<aside class="drawer"><div class="dr-h"><div class="grow"><h3>${esc(m.title)}</h3><div class="muted">Tap + to select apps. Tap the tick to remove.</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div><div class="dr-b"><div class="toolbar"><div class="grow">${ico('search')}<input id="sfQ" type="search" placeholder="Search apps" autocomplete="off"></div></div><div id="sfPool"></div></div><div class="dr-f"><span class="muted" id="sfCount"></span><button class="btn primary" id="sfDone" style="margin-left:auto">${ico('check')}Done</button></div></aside>`;
+  const count = () => { $('#sfCount').textContent = sel.size + ' selected' + (m.max === Infinity ? '' : ' (max ' + m.max + ')'); };
+  const draw = () => {
+    const q = $('#sfQ').value.trim().toLowerCase(), l = pool.filter(a => !q || [a.name, a.developerName, a.category].join(' ').toLowerCase().includes(q));
+    $('#sfPool').innerHTML = l.length ? l.map(a => `<button class="sf-pick ${sel.has(a.id) ? 'on' : ''}" data-id="${esc(a.id)}" aria-pressed="${sel.has(a.id)}"><img class="ico" style="width:42px;height:42px;border-radius:11px" src="${esc(a.icon || ICON)}" alt=""><span><b>${esc(a.name)}</b><small>${esc(a.developerName || '')}${k === 'featured' && !a.banner ? ' · no banner' : ''}${stat(a) !== 'live' ? ' · not live' : ''}</small></span><i class="sf-tg">${sel.has(a.id) ? ico('check') : ico('plus')}</i></button>`).join('') : '<div class="empty">' + ico('search') + '<b>No apps found</b></div>';
+    count();
+  };
   draw(); $('#sfQ').oninput = draw; setTimeout(() => $('#sfQ').focus(), 50);
-  $('#sfPool').onclick = async e => { const b = e.target.closest('.sf-pick'); if (!b) return; const id = b.dataset.id, arr = sfList(k); if (arr.length >= m.max || arr.includes(id)) return; arr.push(id); closeOv(); logAct('store', 'Added "' + (S.apps[id].name) + '" to ' + m.title, { appId: id, appName: S.apps[id].name, icon: S.apps[id].icon }); await sfSave(k, arr, 'Added to ' + m.title); };
+  $('#sfPool').onclick = e => {
+    const b = e.target.closest('.sf-pick'); if (!b) return; const id = b.dataset.id;
+    if (sel.has(id)) sel.delete(id); else { if (sel.size >= m.max) { toast('You can pick up to ' + m.max + ' apps here', 'bad'); return; } sel.add(id); }
+    const on = sel.has(id); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); b.querySelector('.sf-tg').innerHTML = on ? ico('check') : ico('plus'); count();
+  };
+  $('#sfDone').onclick = async () => {
+    const next = start.filter(id => sel.has(id)).concat([...sel].filter(id => !start.includes(id)));
+    closeOv();
+    if (next.join() === start.join()) return;
+    const added = next.filter(id => !start.includes(id)), removed = start.filter(id => !next.includes(id));
+    if (added.length || removed.length) logAct('store', m.title + ': ' + (added.length ? 'added ' + added.length : '') + (added.length && removed.length ? ', ' : '') + (removed.length ? 'removed ' + removed.length : ''), { note: added.concat(removed).map(id => (S.apps[id] || {}).name).filter(Boolean).slice(0, 6).join(', ') });
+    await sfSave(k, next, 'Saved');
+  };
   $('#drClose').onclick = closeOv; document.onkeydown = e => { if (e.key === 'Escape') closeOv(); };
 };
 
+/* ---------- app feedback from store users ---------- */
+const fbList = () => Object.keys(S.fb || {}).map(id => ({ id, ...S.fb[id] })).filter(f => f && f.ts).sort((a, b) => b.ts - a.ts);
+const FB_TABS = [['new', 'New'], ['reviewed', 'Reviewed'], ['archived', 'Archived'], ['all', 'All']];
+const fbStars = n => '<span class="fb-st">' + '★'.repeat(Math.max(0, Math.min(5, +n || 0))) + '<i>' + '★'.repeat(5 - Math.max(0, Math.min(5, +n || 0))) + '</i></span>';
+function vFeedback() {
+  const all = fbList(), tab = UI.fbTab || 'new', q = (UI.fbQ || '').trim().toLowerCase(), tf = UI.fbType || 'all';
+  const types = [...new Set(all.map(f => f.type).filter(Boolean))];
+  let list = all.filter(f => tab === 'all' || (f.status || 'new') === tab);
+  if (tf !== 'all') list = list.filter(f => f.type === tf);
+  if (q) list = list.filter(f => [f.appName, f.message, f.username, f.type, (f.topics || []).join(' ')].join(' ').toLowerCase().includes(q));
+  const cnt = t => all.filter(f => t === 'all' || (f.status || 'new') === t).length;
+  const tabs = `<div class="chips" style="margin-bottom:12px">${FB_TABS.map(([t, n]) => `<button class="chip ${tab === t ? 'on' : ''}" data-act="fbTab" data-t="${t}">${n} · ${cnt(t)}</button>`).join('')}</div>`;
+  const bar = `<div class="toolbar"><div class="grow">${ico('search')}<input id="fbQ" type="search" placeholder="Search app, message, user…" value="${esc(UI.fbQ || '')}"></div><select id="fbType" class="sel"><option value="all">All types</option>${types.map(t => `<option ${tf === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></div>`;
+  if (!list.length) return tabs + bar + `<div class="empty card">${ico('inbox')}<b>${all.length ? 'Nothing here' : 'No feedback yet'}</b>${all.length ? 'Try another tab or filter.' : 'Feedback sent from the Feedback section of an app page lands here.'}</div>`;
+  const toneT = { 'Bug or problem': 'bad', Suggestion: 'info', Compliment: 'ok', Question: 'warn' };
+  return tabs + bar + '<div class="stack">' + list.slice(0, UI.fbLimit || 40).map(f => {
+    const a = S.apps[f.appId] || {}, imgs = (Array.isArray(f.images) ? f.images : []).filter(isImg), st = f.status || 'new';
+    return `<div class="item"><div class="item-h"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><b>${esc(f.appName || a.name || 'Unknown app')}</b><div class="meta">${fbStars(f.rating)} · @${esc(f.username || 'user')} · ${ago(+f.ts)}</div></div>${pill(toneT[f.type] || 'nd', f.type || 'Feedback')}${st === 'new' ? pill('info', 'New') : ''}</div>
+    ${(f.topics || []).length ? `<div class="chips" style="margin:8px 0 0">${f.topics.map(t => pill('nd', t)).join('')}</div>` : ''}
+    <p class="body" style="white-space:pre-wrap;word-break:break-word">${esc(f.message)}</p>
+    ${f.device || f.appVersion ? `<div class="meta">${esc([f.device, f.appVersion ? 'App ' + f.appVersion : ''].filter(Boolean).join(' · '))}</div>` : ''}
+    ${imgs.length ? `<div class="shots" style="margin-top:10px">${imgs.map((u, i) => `<a href="${esc(u)}" target="_blank" rel="noopener"><span>${i + 1}</span><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : ''}
+    ${f.adminNote ? `<div class="meta" style="margin-top:8px">Your note: ${esc(f.adminNote)}</div>` : ''}
+    <div class="actions" style="margin-top:12px">${st !== 'reviewed' ? `<button class="btn sm good" data-act="fbSet" data-id="${esc(f.id)}" data-st="reviewed">${ico('check')}Mark reviewed</button>` : ''}${st !== 'archived' ? `<button class="btn sm" data-act="fbSet" data-id="${esc(f.id)}" data-st="archived">${ico('inbox')}Archive</button>` : ''}${st !== 'new' ? `<button class="btn sm" data-act="fbSet" data-id="${esc(f.id)}" data-st="new">Mark new</button>` : ''}<button class="btn sm" data-act="fbNote" data-id="${esc(f.id)}">Note</button>${f.contactOk && f.email ? `<a class="btn sm" href="mailto:${esc(f.email)}?subject=${encodeURIComponent('Your feedback about ' + (f.appName || 'an app'))}">${ico('send')}Email</a>` : ''}${a.name ? `<button class="btn sm" data-act="openApp" data-id="${esc(f.appId)}">Open app</button>` : ''}<button class="btn sm danger" data-act="fbDel" data-id="${esc(f.id)}">${ico('trash')}Delete</button></div></div>`;
+  }).join('') + '</div>' + (list.length > (UI.fbLimit || 40) ? '<div class="more"><button class="btn" data-act="fbMore">Show more</button></div>' : '');
+}
+ACT.fbTab = d => { UI.fbTab = d.t; UI.fbLimit = 40; rerender(); };
+ACT.fbMore = () => { UI.fbLimit = (UI.fbLimit || 40) + 40; rerender(); };
+ACT.fbSet = async d => {
+  const f = S.fb[d.id]; if (!f) return;
+  try { await db.ref('feedback/' + d.id + '/status').set(d.st); f.status = d.st; logAct('review', (d.st === 'reviewed' ? 'Reviewed' : d.st === 'archived' ? 'Archived' : 'Reopened') + ' feedback on "' + (f.appName || 'app') + '"', { appId: f.appId, appName: f.appName }); rerender(); toast(d.st === 'reviewed' ? 'Marked reviewed' : d.st === 'archived' ? 'Archived' : 'Marked new'); } catch (e) { fail(e); }
+};
+ACT.fbNote = async d => {
+  const f = S.fb[d.id]; if (!f) return;
+  const v = await ask({ title: 'Private note', text: 'Only admins see this note.', input: 'Note', value: f.adminNote || '', area: true, ok: 'Save note' }); if (v === null) return;
+  try { await db.ref('feedback/' + d.id + '/adminNote').set(v.trim().slice(0, 500) || null); if (v.trim()) f.adminNote = v.trim().slice(0, 500); else delete f.adminNote; rerender(); toast('Note saved'); } catch (e) { fail(e); }
+};
+ACT.fbDel = async d => {
+  const f = S.fb[d.id]; if (!f) return;
+  if (!(await ask({ title: 'Delete this feedback?', text: 'It is removed for good. This cannot be undone.', ok: 'Delete', danger: true }))) return;
+  try { await db.ref('feedback/' + d.id).remove(); delete S.fb[d.id]; logAct('delete', 'Deleted feedback on "' + (f.appName || 'app') + '"', { appId: f.appId, appName: f.appName }); rerender(); toast('Feedback deleted'); } catch (e) { fail(e); }
+};
+
 /* ---------- router ---------- */
-const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast, history: vHistory, storefront: vStorefront };
+const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports, claims: vClaims, approvals: vApprovals, tickets: vTickets, users: vUsers, broadcast: vBroadcast, history: vHistory, storefront: vStorefront, feedback: vFeedback };
 function route() { return (location.hash.replace(/^#\/?/, '').split('/')[0]) || ''; }
 function routeId() { return decodeURIComponent(location.hash.replace(/^#\/?/, '').split('/')[1] || ''); }
 function buildNav() {
-  const c = { approvals: pendingApps().length + pendingProfiles().length + pendingUpdates().length, reports: reportList().length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
+  const c = { approvals: pendingApps().length + pendingProfiles().length + pendingUpdates().length, reports: reportList().length, feedback: fbList().filter(f => f.status === 'new').length, claims: pendingClaims().length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
   $('#nav').innerHTML = NAV.map(n => n[0] === 'h' ? `<div class="nav-h">${n[1]}</div>` : `<a class="nav-a ${route() === n[0] ? 'on' : ''}" href="#/${n[0]}">${ico(n[2])}<span>${n[1]}</span>${c[n[0]] ? `<span class="cnt">${c[n[0]]}</span>` : ''}</a>`).join('');
 }
 function rerender() {
@@ -676,7 +736,7 @@ function rerender() {
 }
 function bindView() {
   const on = (id, fn) => { const el = $('#' + id); if (el) el.addEventListener('input', fn); };
-  on('appQ', e => { UI.appQ = e.target.value; UI.appLimit = 40; rerender(); }); on('revQ', e => { UI.revQ = e.target.value; UI.revLimit = 30; rerender(); }); on('userQ', e => { UI.userQ = e.target.value; rerender(); });
+  on('fbQ', e => { UI.fbQ = e.target.value; UI.fbLimit = 40; rerender(); }); on('fbType', e => { UI.fbType = e.target.value; rerender(); }); on('appQ', e => { UI.appQ = e.target.value; UI.appLimit = 40; rerender(); }); on('revQ', e => { UI.revQ = e.target.value; UI.revLimit = 30; rerender(); }); on('userQ', e => { UI.userQ = e.target.value; rerender(); });
   const s = $('#appSort'); if (s) s.onchange = e => { UI.appSort = e.target.value; rerender(); };
   const tt = $('#tkText'); if (tt) tt.addEventListener('input', () => { UI.reply[routeId()] = tt.value; });
   const bt = $('#bcText'); if (bt) bt.addEventListener('input', () => { $('#bcLen').textContent = bt.value.length + ' / 280'; $('#bcPrev').textContent = bt.value || 'Your message appears here…'; });
