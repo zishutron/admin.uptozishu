@@ -73,6 +73,7 @@ async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
   await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('adCampaigns', 'ads'), get('adSettings', 'adset'), get('feedback', 'fb'), get('feedbackContact', 'fbc'), get('feedbackNotes', 'fbn'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  Object.values(S.profiles || {}).forEach(p => { if (p && p.verified && +p.verifiedUntil && +p.verifiedUntil < Date.now()) p.verified = false; });
   S.loaded = true;
 }
 async function recount(appId) {
@@ -135,7 +136,7 @@ const ACT = {
   async verifyDev(d) {
     const p = S.profiles[d.u]; if (!p || !p.name) { toast('This developer has not finished their profile yet', 'bad'); return; } const on = p.verified !== true;
     if (!(await ask({ title: (on ? 'Verify ' : 'Remove verified badge from ') + (p.name || 'this developer') + '?', text: on ? 'A Verified badge shows on their store developer page and on all their apps.' : 'Their developer page and apps will show Unverified.', ok: on ? 'Verify' : 'Remove', danger: !on }))) return;
-    try { const vn = note(d.u, 'vf_' + Date.now(), on ? 'Your developer profile is now verified. The Verified badge shows on your store page and apps.' : 'The Verified badge was removed from your developer profile.'); const vu = {}; vu[`devprofiles/${d.u}/verified`] = on ? true : null; if (vn) vu[vn.path] = vn.value; await db.ref().update(vu); if (on) p.verified = true; else delete p.verified; logAct('profile', (on ? 'Verified ' : 'Removed verified badge from ') + (p.name || 'a developer')); toast(on ? 'Developer verified' : 'Badge removed'); rerender(); } catch (e) { fail(e); }
+    try { const vn = note(d.u, 'vf_' + Date.now(), on ? 'Your developer profile is now verified. The Verified badge shows on your store page and apps.' : 'The Verified badge was removed from your developer profile.'); const vu = {}; vu[`devprofiles/${d.u}/verified`] = on ? true : null; vu[`devprofiles/${d.u}/verifiedUntil`] = null; delete p.verifiedUntil; if (vn) vu[vn.path] = vn.value; await db.ref().update(vu); if (on) p.verified = true; else delete p.verified; logAct('profile', (on ? 'Verified ' : 'Removed verified badge from ') + (p.name || 'a developer')); toast(on ? 'Developer verified' : 'Badge removed'); rerender(); } catch (e) { fail(e); }
   },
   async resolve(d) { try { const rp = S.reports[d.id] || {}; await db.ref('reports/' + d.id).remove(); delete S.reports[d.id]; logAct('report', 'Resolved a report on "' + (rp.appName || 'app') + '"' + (rp.reason ? ' (' + rp.reason + ')' : ''), { appId: rp.appId, appName: rp.appName }); toast('Report resolved'); rerender(); } catch (e) { fail(e); } },
   async approve(d) {
@@ -677,7 +678,7 @@ ACT.sfAdd = d => {
 
 /* ---------- paid advertisements (Sponsored or Featured) ---------- */
 const adList = () => Object.keys(S.ads || {}).map(id => ({ id, ...S.ads[id] })).filter(c => c && c.submittedAt).sort((a, b) => b.submittedAt - a.submittedAt);
-const AD_NAME = { sponsored: 'Sponsored', featured: 'Featured' };
+const AD_NAME = { sponsored: 'Sponsored', featured: 'Featured', verified: 'Verified badge', pro: 'Developer Pro' };
 const inr = n => '₹' + (+n || 0).toLocaleString('en-IN');
 const adDay = t => t ? new Date(+t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 const adOn = () => !(S.adset && S.adset.enabled === false);
@@ -695,8 +696,9 @@ function vAds() {
   if (!list.length) return intro + tabs + `<div class="empty card">${ico('mega')}<b>Nothing here</b>Advertisement requests from developers show up here.</div>`;
   return intro + tabs + '<div class="stack">' + list.map(c => {
     const a = S.apps[c.appId] || {}, st = c.status, tone = st === 'approved' ? 'ok' : st === 'rejected' ? 'bad' : 'warn';
-    const warn = !S.apps[c.appId] ? pill('bad', 'App deleted') : stat(a) !== 'live' ? pill('warn', 'App not live') : (c.plan === 'featured' && !a.banner ? pill('nd', 'No banner') : '');
-    return `<div class="item"><div class="item-h"><img class="ico" src="${esc(c.appIcon || a.icon || ICON)}" alt=""><div class="grow"><b>${esc(c.appName || a.name || 'App')}</b><div class="meta">${esc(AD_NAME[c.plan] || c.plan)} · ${c.months} month${c.months > 1 ? 's' : ''} · <b>${inr(c.amount)}</b> · ${ago(+c.submittedAt)} ${warn}</div></div>${pill(tone, st)}</div>
+    const a2 = S.apps[c.appId2] || {}, noProf = (c.plan === 'verified' || c.plan === 'pro') && !(S.profiles[c.uid] && S.profiles[c.uid].name);
+    const warn = (c.plan !== 'verified' && !S.apps[c.appId] ? pill('bad', 'App deleted') : c.plan !== 'verified' && stat(a) !== 'live' ? pill('warn', 'App not live') : '') + (c.plan === 'featured' && !a.banner ? pill('nd', 'No banner') : '') + (c.plan === 'pro' && !a2.banner ? pill('nd', 'Featured app has no banner') : '') + (noProf ? pill('bad', 'No developer profile') : '');
+    return `<div class="item"><div class="item-h"><img class="ico" src="${esc(c.appIcon || a.icon || ICON)}" alt=""><div class="grow"><b>${esc(c.appName || a.name || 'Developer')}${c.plan === 'pro' && c.appName2 ? ' + ' + esc(c.appName2) : ''}</b><div class="meta">${esc(AD_NAME[c.plan] || c.plan)}${c.plan === 'pro' ? ' (Sponsored: first app, Featured: second app)' : ''} · ${c.months} month${c.months > 1 ? 's' : ''} · <b>${inr(c.amount)}</b> · ${ago(+c.submittedAt)} ${warn}</div></div>${pill(tone, st)}</div>
     <table class="difft" style="margin:10px 0"><tbody>
     <tr><td class="muted">Name</td><td>${esc(c.name)}</td></tr><tr><td class="muted">Phone</td><td>${esc(c.phone)}</td></tr><tr><td class="muted">Email</td><td>${esc(c.email)}</td></tr>
     <tr><td class="muted">UTR</td><td><b>${esc(c.utr)}</b></td></tr><tr><td class="muted">Paid on</td><td>${esc(c.paidOn)}</td></tr>${c.note ? `<tr><td class="muted">Note</td><td>${esc(c.note)}</td></tr>` : ''}
@@ -708,18 +710,31 @@ function vAds() {
 ACT.adTab = d => { UI.adTab = d.t; rerender(); };
 ACT.adApprove = async d => {
   const c = S.ads[d.id]; if (!c || c.status !== 'pending') return;
-  const a = S.apps[c.appId]; if (!a) { toast('This app was deleted, reject the request instead', 'bad'); return; }
-  const k = c.plan === 'featured' ? 'featured' : 'sponsored', list = sfList(k), until = Object.assign({}, (S.sf && S.sf[k + 'Until']) || {}), now = Date.now();
-  const base = list.includes(c.appId) && +until[c.appId] > now ? +until[c.appId] : now, end = base + (+c.months || 1) * 30 * 864e5;
-  if (!(await ask({ title: 'Approve this advertisement?', text: `${a.name} goes into the ${AD_NAME[k]} list until ${adDay(end)}. Make sure ${inr(c.amount)} with UTR ${c.utr} is in your UPI account.` + (k === 'featured' && list.length >= 8 ? ' The Featured list already has 8 or more apps, the store shows only the first 8.' : ''), ok: 'Approve' }))) return;
-  if (!list.includes(c.appId)) list.push(c.appId); until[c.appId] = end;
-  const up = {}; up['storefront/' + k] = list; up['storefront/' + k + 'Until/' + c.appId] = end;
-  Object.assign(up, { [`adCampaigns/${d.id}/status`]: 'approved', [`adCampaigns/${d.id}/reviewedAt`]: now, [`adCampaigns/${d.id}/startsAt`]: base, [`adCampaigns/${d.id}/endsAt`]: end, [`adCampaigns/${d.id}/reviewedBy`]: S.user.uid });
-  const n = note(c.uid, 'ad_' + now, `Your ${AD_NAME[k]} advertisement for "${a.name}" is approved. It is live in the store until ${adDay(end)} (the store updates within about 10 minutes).`, c.appId); if (n) up[n.path] = n.value;
+  const P = c.plan, now = Date.now(), span = (+c.months || 1) * 30 * 864e5;
+  const targets = P === 'sponsored' ? [['sponsored', c.appId]] : P === 'featured' ? [['featured', c.appId]] : P === 'pro' ? [['sponsored', c.appId], ['featured', c.appId2]] : [];
+  const wantsBadge = P === 'verified' || P === 'pro', prof = S.profiles[c.uid];
+  for (const [k, id] of targets) if (!S.apps[id]) { toast('One of the apps was deleted, reject the request instead', 'bad'); return; }
+  if (wantsBadge && (!prof || !prof.name)) { toast('This developer has no public profile yet, so the badge cannot be added. Reject the request or ask them to finish the profile', 'bad'); return; }
+  const up = {}, lines = [], lists = {}, untils = {}; let first = null, last = 0;
+  for (const [k, id] of targets) {
+    const list = lists[k] || (lists[k] = sfList(k)), un = untils[k] || (untils[k] = Object.assign({}, (S.sf && S.sf[k + 'Until']) || {}));
+    const base = list.includes(id) && +un[id] > now ? +un[id] : now, end = base + span;
+    if (!list.includes(id)) list.push(id); un[id] = end;
+    up['storefront/' + k] = list; up['storefront/' + k + 'Until/' + id] = end;
+    if (first === null) first = base; last = Math.max(last, end);
+    lines.push(`${S.apps[id].name} in ${AD_NAME[k]} until ${adDay(end)}` + (k === 'featured' && list.length > 8 ? ' (the Featured list has more than 8 apps, the store shows the first 8)' : ''));
+  }
+  if (wantsBadge) { const base = prof.verified && +prof.verifiedUntil > now ? +prof.verifiedUntil : now, end = base + (P === 'pro' ? span * 2 : span); up[`devprofiles/${c.uid}/verified`] = true; up[`devprofiles/${c.uid}/verifiedUntil`] = end; if (first === null) first = base; last = Math.max(last, end); lines.push(`${prof.name} gets the Verified badge until ${adDay(end)}` + (P === 'pro' ? ' (Pro gives 2 months of badge for each paid month)' : '')); }
+  if (!(await ask({ title: 'Approve this ' + AD_NAME[P] + ' plan?', text: lines.join('. ') + '. Make sure ' + inr(c.amount) + ' with UTR ' + c.utr + ' is in your UPI account.', ok: 'Approve' }))) return;
+  Object.assign(up, { [`adCampaigns/${d.id}/status`]: 'approved', [`adCampaigns/${d.id}/reviewedAt`]: now, [`adCampaigns/${d.id}/startsAt`]: first, [`adCampaigns/${d.id}/endsAt`]: last, [`adCampaigns/${d.id}/reviewedBy`]: S.user.uid });
+  const n = note(c.uid, 'ad_' + now, `Your ${AD_NAME[P]} plan is approved. ${lines.join('. ')}. The store updates within about 10 minutes.`, c.appId || ''); if (n) up[n.path] = n.value;
   try {
-    await db.ref().update(up); S.sf = Object.assign({}, S.sf || {}); S.sf[k] = list; S.sf[k + 'Until'] = until; Object.assign(S.ads[d.id], { status: 'approved', reviewedAt: now, startsAt: base, endsAt: end });
-    logAct('store', `Approved ${AD_NAME[k]} ad for ${a.name}`, { appId: c.appId, appName: a.name, icon: a.icon }); rerender();
-    sentAnim('Advertisement approved', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
+    await db.ref().update(up);
+    S.sf = Object.assign({}, S.sf || {}); Object.keys(lists).forEach(k => { S.sf[k] = lists[k]; S.sf[k + 'Until'] = untils[k]; });
+    if (wantsBadge) { prof.verified = true; prof.verifiedUntil = up[`devprofiles/${c.uid}/verifiedUntil`]; }
+    Object.assign(S.ads[d.id], { status: 'approved', reviewedAt: now, startsAt: first, endsAt: last });
+    logAct('store', `Approved ${AD_NAME[P]} plan for ${c.appName || (prof && prof.name) || 'a developer'}`, { appId: c.appId || '', appName: c.appName || '', icon: c.appIcon || '' }); rerender();
+    sentAnim('Plan approved', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
     if (MAIL_ENDPOINT) { const m = await mailCall('addecision', d.id); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
   } catch (e) { fail(e); }
 };
@@ -727,10 +742,10 @@ ACT.adReject = async d => {
   const c = S.ads[d.id]; if (!c || c.status !== 'pending') return;
   const why = await ask({ title: 'Reject this advertisement?', text: 'The developer is told the reason.', input: 'Reason (shown to the developer)', value: '', area: true, ok: 'Reject', danger: true, required: true }); if (why === null || !String(why).trim()) return;
   const now = Date.now(), up = { [`adCampaigns/${d.id}/status`]: 'rejected', [`adCampaigns/${d.id}/reviewedAt`]: now, [`adCampaigns/${d.id}/rejectReason`]: String(why).trim().slice(0, 400), [`adCampaigns/${d.id}/reviewedBy`]: S.user.uid };
-  const n = note(c.uid, 'ad_' + now, `Your ${AD_NAME[c.plan] || ''} advertisement for "${c.appName}" was rejected. Reason: ${String(why).trim()}`, c.appId); if (n) up[n.path] = n.value;
+  const n = note(c.uid, 'ad_' + now, `Your ${AD_NAME[c.plan] || ''} plan request${c.appName ? ' for "' + c.appName + '"' : ''} was rejected. Reason: ${String(why).trim()}`, c.appId); if (n) up[n.path] = n.value;
   try {
     await db.ref().update(up); Object.assign(S.ads[d.id], { status: 'rejected', reviewedAt: now, rejectReason: String(why).trim().slice(0, 400) });
-    logAct('reject', 'Rejected ad for ' + c.appName, { appId: c.appId, appName: c.appName, note: String(why).slice(0, 150) }); rerender();
+    logAct('reject', 'Rejected ' + (AD_NAME[c.plan] || 'ad') + ' request from ' + (c.appName || 'a developer'), { appId: c.appId || '', appName: c.appName || '', note: String(why).slice(0, 150) }); rerender();
     sentAnim('Advertisement rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
     if (MAIL_ENDPOINT) { const m = await mailCall('addecision', d.id); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
   } catch (e) { fail(e); }
