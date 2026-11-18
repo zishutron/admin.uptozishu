@@ -28,7 +28,7 @@ const NAV = [
   ['h', 'You'], ['history', 'History', 'clock']
 ];
 const TITLES = { '': 'Overview', apps: 'Apps', reviews: 'Reviews', approvals: 'Approvals', reports: 'Reports', claims: 'Claim requests', tickets: 'Support tickets', users: 'Users & developers', broadcast: 'Broadcast', history: 'History', storefront: 'Storefront', feedback: 'App feedback', ads: 'Advertisements' };
-const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, susp: {}, sf: {}, ads: {}, fb: {}, fbc: {}, fbn: {}, reviews: {}, stats: {}, failed: [], loaded: false };
+const S = { user: null, apps: {}, users: {}, devs: {}, profiles: {}, reports: {}, claims: {}, tickets: {}, pend: {}, upd: {}, logs: {}, susp: {}, sf: {}, ads: {}, adset: {}, fb: {}, fbc: {}, fbn: {}, reviews: {}, stats: {}, failed: [], loaded: false };
 const UI = { tkTab: 'wait', reply: {}, appQ: '', appF: 'all', appSort: 'new', revQ: '', revF: 'all', claimTab: 'pending', userQ: '', userF: 'all', range: 14, appLimit: 40, revLimit: 30 };
 
 /* ---------- helpers ---------- */
@@ -72,7 +72,7 @@ function ask(o) {
 async function loadAll() {
   S.failed = [];
   const get = (p, k) => db.ref(p).once('value').then(s => { S[k] = s.val() || {}; }).catch(() => { S.failed.push(p); S[k] = S[k] || {}; });
-  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('adCampaigns', 'ads'), get('feedback', 'fb'), get('feedbackContact', 'fbc'), get('feedbackNotes', 'fbn'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
+  await Promise.all([get('apps', 'apps'), get('users', 'users'), get('developers', 'devs'), get('reports', 'reports'), get('claims', 'claims'), get('tickets', 'tickets'), get('devprofilePending', 'pend'), get('appUpdates', 'upd'), get('suspendedUsers', 'susp'), get('storefront', 'sf'), get('adCampaigns', 'ads'), get('adSettings', 'adset'), get('feedback', 'fb'), get('feedbackContact', 'fbc'), get('feedbackNotes', 'fbn'), get('adminLogs/' + S.user.uid, 'logs'), get('reviews', 'reviews'), get('stats', 'stats'), get('devprofiles', 'profiles')]);
   S.loaded = true;
 }
 async function recount(appId) {
@@ -182,7 +182,7 @@ function vOverview() {
   const dl = apps.reduce((s, a) => s + (+a.downloadCount || 0), 0), views = apps.reduce((s, a) => s + (+a.views || 0), 0);
   const revs = allReviews(), vis = revs.filter(r => !r.hidden && r.rating), avg = vis.length ? vis.reduce((s, r) => s + (+r.rating || 0), 0) / vis.length : 0;
   const devIds = new Set([...Object.keys(S.devs), ...apps.map(a => a.developerUid).filter(Boolean)]);
-  const pc = pendingClaims().length, rp = reportList().length, ap = pendingApps().length + pendingProfiles().length + pendingUpdates().length;
+  const adPend = adList().filter(c => c.status === 'pending').length, adAct = adList().filter(c => c.status === 'approved' && +c.endsAt > Date.now()).length, pc = pendingClaims().length, rp = reportList().length, ap = pendingApps().length + pendingProfiles().length + pendingUpdates().length;
   const keys = dayKeys(UI.range), perDay = {}; Object.keys(S.stats).forEach(aid => { const d = S.stats[aid]; if (d && typeof d === 'object') Object.keys(d).forEach(k => { perDay[k] = (perDay[k] || 0) + (+d[k] || 0); }); });
   const vals = keys.map(k => perDay[k] || 0), tot = vals.reduce((a, b) => a + b, 0);
   const top = apps.slice().sort((a, b) => (+b.downloadCount || 0) - (+a.downloadCount || 0)).slice(0, 6), topMax = Math.max(1, +(top[0] && top[0].downloadCount) || 1);
@@ -195,7 +195,7 @@ function vOverview() {
   feed.sort((a, b) => b.t - a.t);
   const todo = (href, n, t, s) => `<a class="todo" href="${href}"><div class="ic fi"><span class="dot ${n ? 'warn' : 'ok'}">${ico(n ? 'clock' : 'check')}</span></div><div><b>${t}</b><span>${s}</span></div>${n ? `<span class="cnt">${n}</span>` : ''}</a>`;
   return (S.failed.length ? `<div class="item" style="border-color:rgba(251,191,36,.5);margin-bottom:16px"><b style="color:var(--warn)">Some data could not be loaded</b><div class="meta">${S.failed.map(esc).join(', ')} — publish the new Firebase rules, then press refresh.</div></div>` : '') + `
-  <div class="grid g-kpi">${kpi('apps', '', nf(apps.length), 'Total apps', `${live} live · ${drafts} draft`, '#/apps')}${kpi('dl', 'ok', nf(dl), 'Downloads', 'all time')}${kpi('check', ap ? 'warn' : 'ok', nf(ap), 'Approvals', ap ? 'waiting for review' : 'all clear', '#/approvals')}${kpi('flag', rp ? 'bad' : 'ok', nf(rp), 'Reports', rp ? 'open reports' : 'all clear', '#/reports')}${kpi('users', 'vio', nf(Object.keys(S.users).length), 'Store users', nf(devIds.size) + ' developers', '#/users')}${kpi('pause', susp ? 'bad' : '', nf(susp), 'Suspended apps', '', '#/apps')}</div>
+  <div class="grid g-kpi">${kpi('apps', '', nf(apps.length), 'Total apps', `${live} live · ${drafts} draft`, '#/apps')}${kpi('dl', 'ok', nf(dl), 'Downloads', 'all time')}${kpi('check', ap ? 'warn' : 'ok', nf(ap), 'Approvals', ap ? 'waiting for review' : 'all clear', '#/approvals')}${kpi('flag', rp ? 'bad' : 'ok', nf(rp), 'Reports', rp ? 'open reports' : 'all clear', '#/reports')}${kpi('users', 'vio', nf(Object.keys(S.users).length), 'Store users', nf(devIds.size) + ' developers', '#/users')}${kpi('mega', adPend ? 'warn' : 'ok', nf(adPend), 'Advertisements', adOn() ? (adAct ? adAct + ' live now' : 'service on') : 'service off', '#/ads')}</div>
   <div class="grid g-2">
     <div class="card"><div class="card-h"><div><h3>Downloads</h3><div class="sub">${nf(tot)} in the last ${UI.range} days</div></div><div class="seg">${[7, 14, 30].map(n => `<button class="${UI.range === n ? 'on' : ''}" data-act="range" data-n="${n}">${n}d</button>`).join('')}</div></div>${lineChart(keys, vals)}</div>
     <div class="card"><h3>Needs attention</h3><div class="sub">Things waiting for you</div>${todo('#/claims', pc, 'Claim requests', pc ? pc + ' pending' : 'All clear')}${todo('#/reports', rp, 'Reports', rp ? rp + ' open' : 'All clear')}${todo('#/apps', susp, 'Suspended apps', susp ? 'Review them' : 'None')}</div>
@@ -680,11 +680,18 @@ const adList = () => Object.keys(S.ads || {}).map(id => ({ id, ...S.ads[id] })).
 const AD_NAME = { sponsored: 'Sponsored', featured: 'Featured' };
 const inr = n => '₹' + (+n || 0).toLocaleString('en-IN');
 const adDay = t => t ? new Date(+t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+const adOn = () => !(S.adset && S.adset.enabled === false);
+ACT.adPower = async () => {
+  const on = adOn();
+  if (!(await ask({ title: on ? 'Turn advertisements off?' : 'Turn advertisements on?', text: on ? 'Developers will see "This feature is not available yet" on the App Advertisement page and cannot send new requests. Pending requests stay here.' : 'Developers can send advertisement requests again.', ok: on ? 'Turn off' : 'Turn on', danger: on }))) return;
+  try { await db.ref('adSettings/enabled').set(!on); S.adset = Object.assign({}, S.adset, { enabled: !on }); logAct('store', 'Advertisements turned ' + (on ? 'off' : 'on')); rerender(); toast(on ? 'Advertisements are off' : 'Advertisements are on'); } catch (e) { fail(e); }
+};
 function vAds() {
   const all = adList(), tab = UI.adTab || 'pending', cnt = t => all.filter(c => t === 'all' || c.status === t).length;
   const tabs = `<div class="chips" style="margin-bottom:14px">${[['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['all', 'All']].map(([t, n]) => `<button class="chip ${tab === t ? 'on' : ''}" data-act="adTab" data-t="${t}">${n} · ${cnt(t)}</button>`).join('')}</div>`;
   const list = all.filter(c => tab === 'all' || c.status === tab);
-  const intro = `<div class="muted" style="margin-bottom:14px">Check the payment screenshot, UTR and amount against your UPI app (7654613259@fam). Approving adds the app to the Sponsored or Featured list of the store for the paid months. Rejecting needs a reason.</div>`;
+  const power = `<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div class="grow"><b>Advertisement service</b><div class="muted">${adOn() ? 'On. Developers can send requests.' : 'Off. Developers see "This feature is not available yet".'}</div></div><button class="btn sm ${adOn() ? 'danger' : 'good'}" data-act="adPower">${adOn() ? 'Turn off' : 'Turn on'}</button></div>`;
+  const intro = power + `<div class="muted" style="margin-bottom:14px">Check the payment screenshot, UTR and amount against your UPI app (7654613259@fam). Approving adds the app to the Sponsored or Featured list of the store for the paid months. Rejecting needs a reason.</div>`;
   if (!list.length) return intro + tabs + `<div class="empty card">${ico('mega')}<b>Nothing here</b>Advertisement requests from developers show up here.</div>`;
   return intro + tabs + '<div class="stack">' + list.map(c => {
     const a = S.apps[c.appId] || {}, st = c.status, tone = st === 'approved' ? 'ok' : st === 'rejected' ? 'bad' : 'warn';
