@@ -691,16 +691,30 @@ const AD_NAME = { sponsored: 'Sponsored', featured: 'Featured', verified: 'Verif
 const inr = n => '₹' + (+n || 0).toLocaleString('en-IN');
 const adDay = t => t ? new Date(+t).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 const adOn = () => !(S.adset && S.adset.enabled === false);
+const AD_PLAN_KEYS = ['sponsored', 'featured', 'verified', 'pro'];
+const adPlanOn = k => !(S.adset && S.adset.plans && S.adset.plans[k] === false);
+ACT.adPlanPower = async d => {
+  const k = d.p; if (!AD_PLAN_KEYS.includes(k)) return;
+  const on = adPlanOn(k), nm = AD_NAME[k];
+  if (!(await ask({ title: on ? 'Turn off the ' + nm + ' plan?' : 'Turn on the ' + nm + ' plan?', text: on ? 'Developers will see "Not available right now" on the ' + nm + ' plan and cannot send new requests for it. The other plans stay as they are. Pending requests stay here.' : 'Developers can send ' + nm + ' requests again.', ok: on ? 'Turn off' : 'Turn on', danger: on }))) return;
+  try {
+    if (on) await db.ref('adSettings/plans/' + k).set(false); else await db.ref('adSettings/plans/' + k).remove();
+    const pl = Object.assign({}, (S.adset && S.adset.plans) || {}); if (on) pl[k] = false; else delete pl[k];
+    S.adset = Object.assign({}, S.adset, { plans: pl });
+    logAct('store', nm + ' plan turned ' + (on ? 'off' : 'on')); rerender(); toast(nm + ' plan is ' + (on ? 'off' : 'on'));
+  } catch (e) { fail(e); }
+};
 ACT.adPower = async () => {
   const on = adOn();
-  if (!(await ask({ title: on ? 'Turn advertisements off?' : 'Turn advertisements on?', text: on ? 'Developers will see "This feature is not available yet" on the App Advertisement page and cannot send new requests. Pending requests stay here.' : 'Developers can send advertisement requests again.', ok: on ? 'Turn off' : 'Turn on', danger: on }))) return;
+  if (!(await ask({ title: on ? 'Turn all advertisements off?' : 'Turn all advertisements on?', text: on ? 'Every plan (Sponsored, Featured, Verified badge and Developer Pro) goes off. Developers will see "This feature is not available yet" on the App Advertisement page and cannot send new requests. Pending requests stay here. To stop only one plan, use the Plans list below.' : 'Developers can send advertisement requests again.', ok: on ? 'Turn off' : 'Turn on', danger: on }))) return;
   try { await db.ref('adSettings/enabled').set(!on); S.adset = Object.assign({}, S.adset, { enabled: !on }); logAct('store', 'Advertisements turned ' + (on ? 'off' : 'on')); rerender(); toast(on ? 'Advertisements are off' : 'Advertisements are on'); } catch (e) { fail(e); }
 };
 function vAds() {
   const all = adList(), tab = UI.adTab || 'pending', cnt = t => all.filter(c => t === 'all' || c.status === t).length;
   const tabs = `<div class="chips" style="margin-bottom:14px">${[['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['all', 'All']].map(([t, n]) => `<button class="chip ${tab === t ? 'on' : ''}" data-act="adTab" data-t="${t}">${n} · ${cnt(t)}</button>`).join('')}</div>`;
   const list = all.filter(c => tab === 'all' || c.status === tab);
-  const power = `<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div class="grow"><b>Advertisement service</b><div class="muted">${adOn() ? 'On. Developers can send requests.' : 'Off. Developers see "This feature is not available yet".'}</div></div><button class="btn sm ${adOn() ? 'danger' : 'good'}" data-act="adPower">${adOn() ? 'Turn off' : 'Turn on'}</button></div>`;
+  const power = `<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:14px"><div class="grow"><b>Advertisement service</b><div class="muted">${adOn() ? 'On. Developers can send requests.' : 'Off. Developers see "This feature is not available yet".'}</div></div><button class="btn sm ${adOn() ? 'danger' : 'good'}" data-act="adPower">${adOn() ? 'Turn off all' : 'Turn on all'}</button></div>`
+    + `<div class="card" style="margin-bottom:14px"><b>Plans</b><div class="muted" style="margin-bottom:6px">Turn off one plan without touching the others.${adOn() ? '' : ' The whole service is off right now, so every plan is hidden.'}</div>${AD_PLAN_KEYS.map(k => `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line,rgba(127,127,127,.2))"><div class="grow"><b>${AD_NAME[k]}</b><div class="muted">${adPlanOn(k) ? 'On' : 'Off. Developers see "Not available right now".'}</div></div><button class="btn sm ${adPlanOn(k) ? 'danger' : 'good'}" data-act="adPlanPower" data-p="${k}">${adPlanOn(k) ? 'Turn off' : 'Turn on'}</button></div>`).join('')}</div>`;
   const intro = power + `<div class="muted" style="margin-bottom:14px">Check the payment screenshot, UTR and amount against your UPI app (7654613259@fam). Approving adds the app to the Sponsored or Featured list of the store for the paid months. Rejecting needs a reason.</div>`;
   if (!list.length) return intro + tabs + `<div class="empty card">${ico('mega')}<b>Nothing here</b>Advertisement requests from developers show up here.</div>`;
   return intro + tabs + '<div class="stack">' + list.map(c => {
