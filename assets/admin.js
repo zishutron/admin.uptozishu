@@ -39,9 +39,9 @@ function appCreated(a) { const v = a.timestamp || a.createdAt || a.uploadDate; i
 const dstr = t => t ? new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 function ago(t) { if (!t) return ''; const s = Math.max(1, (Date.now() - t) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; if (s < 2592000) return Math.floor(s / 86400) + 'd ago'; return dstr(t); }
 const ICON = 'https://img.icons8.com/color/144/android-os.png';
-const stat = a => ['suspended', 'draft', 'pending', 'rejected'].includes(a.status) ? a.status : 'live';
+const stat = a => ['suspended', 'draft', 'pending', 'rejected', 'upcoming'].includes(a.status) ? a.status : 'live';
 const pill = (k, t) => `<span class="pill ${k}">${esc(t)}</span>`;
-const statPill = a => { const s = stat(a); return pill(s === 'live' ? 'ok' : s === 'draft' ? '' : s === 'pending' ? 'warn' : 'bad', { live: 'Live', draft: 'Draft', pending: 'In review', rejected: 'Rejected', suspended: 'Suspended' }[s]); };
+const statPill = a => { const s = stat(a); return pill(s === 'live' ? 'ok' : s === 'draft' || s === 'upcoming' ? '' : s === 'pending' ? 'warn' : 'bad', { live: 'Live', upcoming: 'Coming soon', draft: 'Draft', pending: a.preRelease ? 'In review · Pre-release' : 'In review', rejected: 'Rejected', suspended: 'Suspended' }[s]); };
 const stars = r => { r = Math.round(+r || 0); return '<span class="stars">' + '★'.repeat(r) + '<span style="opacity:.3">' + '★'.repeat(5 - r) + '</span></span>'; };
 const ckey = s => String(s || '').replace(/[^A-Za-z0-9_-]/g, '_');
 const appList = () => Object.keys(S.apps).map(id => ({ id, ...S.apps[id] }));
@@ -220,7 +220,7 @@ function vApps() {
   const shown = list.slice(0, UI.appLimit);
   return `<div class="toolbar"><div class="grow">${ico('search')}<input id="appQ" type="search" placeholder="Search name, package, developer…" value="${esc(UI.appQ)}"></div>
     <select id="appSort"><option value="new"${UI.appSort === 'new' ? ' selected' : ''}>Newest</option><option value="dl"${UI.appSort === 'dl' ? ' selected' : ''}>Most downloads</option><option value="rate"${UI.appSort === 'rate' ? ' selected' : ''}>Top rated</option><option value="name"${UI.appSort === 'name' ? ' selected' : ''}>Name A–Z</option></select></div>
-  <div class="chips" style="margin-bottom:16px">${[['all', 'All'], ['live', 'Live'], ['pending', 'In review'], ['rejected', 'Rejected'], ['draft', 'Draft'], ['suspended', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.appF === k ? 'on' : ''}" data-act="appF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
+  <div class="chips" style="margin-bottom:16px">${[['all', 'All'], ['live', 'Live'], ['upcoming', 'Coming soon'], ['pending', 'In review'], ['rejected', 'Rejected'], ['draft', 'Draft'], ['suspended', 'Suspended']].map(([k, t]) => `<button class="chip ${UI.appF === k ? 'on' : ''}" data-act="appF" data-k="${k}">${t} · ${cnt(k)}</button>`).join('')}</div>
   <div class="table" style="--cols:minmax(0,2.4fr) minmax(0,1.3fr) 110px 90px 90px 110px"><div class="tr-h"><div>App</div><div>Developer</div><div>Status</div><div>Downloads</div><div>Rating</div><div class="cell r">Actions</div></div>
   ${shown.length ? shown.map(a => `<div class="tr-r" data-act="openApp" data-id="${esc(a.id)}"><div class="cell who"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div><b>${esc(a.name || 'Untitled')}</b><small>${esc(a.package || '')}</small></div></div><div class="cell hide-m"><span>${esc(a.developerName || userName(a.developerUid) || '—')}</span></div><div class="cell">${statPill(a)}</div><div class="cell hide-m">${nf(a.downloadCount)}</div><div class="cell hide-m">${+a.rating ? (+a.rating).toFixed(1) + ' ★' : '—'}</div><div class="cell r hide-m">${stat(a) === 'suspended' ? `<button class="btn sm good" data-act="restore" data-id="${esc(a.id)}">Restore</button>` : `<button class="btn sm danger" data-act="suspend" data-id="${esc(a.id)}">Suspend</button>`}</div></div>`).join('') : `<div class="empty">${ico('inbox')}<b>No apps found</b>Try another search or filter.</div>`}</div>
   ${list.length > shown.length ? `<div class="more"><button class="btn" data-act="more" data-k="apps">Show more (${list.length - shown.length})</button></div>` : ''}`;
@@ -451,15 +451,15 @@ async function decideApp(id, ok) {
   if (!ok) {
     reason = await ask({ title: 'Reject this app?', text: 'The developer is notified and emailed with your reason, and can fix the app and submit it again.', input: 'Reason shown to the developer', area: true, required: true, ok: 'Reject app' });
     if (!reason) return;
-  } else if (!(await ask({ title: 'Approve and publish?', text: `"${a.name}" goes live on the store after the next store update. The developer is notified and emailed.`, ok: 'Approve' }))) return;
-  const now = Date.now(), up = {};
-  up[`apps/${id}/status`] = ok ? 'live' : 'rejected'; up[`apps/${id}/reviewedAt`] = now; up[`apps/${id}/rejectReason`] = ok ? null : reason.slice(0, 400);
+  } else if (!(await ask({ title: a.preRelease ? 'Approve as Coming soon?' : 'Approve and publish?', text: a.preRelease ? `"${a.name}" is listed as Coming soon after the next store update. People can pre-register, but nobody can download it yet. The developer is notified and emailed.` : `"${a.name}" goes live on the store after the next store update. The developer is notified and emailed.`, ok: 'Approve' }))) return;
+  const now = Date.now(), up = {}, soonNow = ok && !!a.preRelease, goStatus = soonNow ? 'upcoming' : 'live';
+  up[`apps/${id}/status`] = ok ? goStatus : 'rejected'; up[`apps/${id}/reviewedAt`] = now; up[`apps/${id}/rejectReason`] = ok ? null : reason.slice(0, 400);
   if (ok) { up[`apps/${id}/approved`] = true; up[`apps/${id}/updatedDate`] = new Date().toISOString().split('T')[0]; }
-  if (a.developerUid) up[`notifications/${a.developerUid}/ar_${id.slice(-8)}_${now}`] = { type: 'appreview', appId: id, appName: String(a.name || '').slice(0, 100), text: ok ? `Good news! Your app "${a.name}" was approved and is now live on UptoZishu.` : `Your app "${a.name}" was not approved. Please fix the issue and submit it again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
+  if (a.developerUid) up[`notifications/${a.developerUid}/ar_${id.slice(-8)}_${now}`] = { type: 'appreview', appId: id, appName: String(a.name || '').slice(0, 100), text: ok ? (soonNow ? `Good news! Your pre-release "${a.name}" was approved and is now listed as Coming soon on UptoZishu. When you are ready, tap Release now in My Apps.` : `Good news! Your app "${a.name}" was approved and is now live on UptoZishu.`) : `Your app "${a.name}" was not approved. Please fix the issue and submit it again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
   try {
     await db.ref().update(up);
-    a.status = ok ? 'live' : 'rejected'; a.reviewedAt = now; a.rejectReason = ok ? null : reason; if (ok) a.approved = true;
-    logAct(ok ? 'approve' : 'reject', (ok ? 'Approved app "' : 'Rejected app "') + a.name + '"', { appId: id, appName: a.name, icon: a.icon, note: ok ? '' : reason });
+    a.status = ok ? goStatus : 'rejected'; a.reviewedAt = now; a.rejectReason = ok ? null : reason; if (ok) a.approved = true;
+    logAct(ok ? 'approve' : 'reject', (ok ? (soonNow ? 'Approved pre-release "' : 'Approved app "') : 'Rejected app "') + a.name + '"', { appId: id, appName: a.name, icon: a.icon, note: ok ? '' : reason });
     closeOv(); rerender();
     sentAnim(ok ? 'App approved' : 'App rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
     if (MAIL_ENDPOINT) { const m = await mailCall('appdecision', id); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
@@ -507,7 +507,7 @@ function openReview(key, isUpd) {
   const diff = live && ch.length ? `<div class="dr-sec"><h4>What changed</h4><table class="difft"><thead><tr><th></th><th>Live now</th><th>New</th></tr></thead><tbody>${ch.filter(k => !['icon', 'banner', 'screenshot'].includes(k)).map(k => `<tr><td class="muted">${UF_LABEL[k]}</td><td>${esc(String(live[k] || '—').slice(0, 160))}</td><td><b>${esc(String(a[k] || '—').slice(0, 160))}</b></td></tr>`).join('') || '<tr><td colspan="3" class="muted">Only images changed</td></tr>'}</tbody></table></div>` : '';
   const act = isUpd ? `<button class="btn good" data-act="upApprove" data-k="${esc(key)}">${ico('check')}Approve update</button><button class="btn danger" data-act="upReject" data-k="${esc(key)}">${ico('x')}Reject</button>` : (a.status === 'pending' ? `<button class="btn good" data-act="apApprove" data-id="${esc(key)}">${ico('check')}Approve</button><button class="btn danger" data-act="apReject" data-id="${esc(key)}">${ico('x')}Reject</button>` : '');
   UI.openId = null; ov.className = 'overlay'; ov.hidden = false;
-  ov.innerHTML = `<aside class="drawer"><div class="dr-h"><img class="ico" style="width:44px;height:44px;border-radius:12px" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><h3>${esc(a.name || 'Untitled')}</h3><div class="muted">${isUpd ? 'Update request' : 'New app'} · ${esc(a.package || '')}</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div>
+  ov.innerHTML = `<aside class="drawer"><div class="dr-h"><img class="ico" style="width:44px;height:44px;border-radius:12px" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><h3>${esc(a.name || 'Untitled')}</h3><div class="muted">${isUpd ? (a.release ? 'Release request' : 'Update request') : (a.preRelease ? 'New pre-release' : 'New app')} · ${esc(a.package || '')}</div></div><button class="icon-btn" id="drClose" aria-label="Close">${ico('x')}</button></div>
   <div class="dr-b">
   ${diff}
   <div class="dr-sec"><h4>Featured image${mark('banner')}</h4>${imgBox(a.banner, 'rv-banner')}</div>
@@ -532,19 +532,20 @@ async function decideUpdate(key, ok) {
   if (ok && a.status === 'suspended') { toast('This app is suspended. Restore it first.', 'bad'); return; }
   let reason = '';
   if (!ok) { reason = await ask({ title: 'Reject this update?', text: 'The live version stays on the store. The developer is notified and emailed with your reason, and can fix the update and submit it again.', input: 'Reason shown to the developer', area: true, required: true, ok: 'Reject update' }); if (!reason) return; }
-  else if (!(await ask({ title: 'Approve this update?', text: `The new version of "${a.name}" replaces the live one after the next store update. The developer is notified and emailed.`, ok: 'Approve update' }))) return;
-  const now = Date.now(), up = {}, nm = u.name || a.name;
+  else if (!(await ask({ title: u.release ? 'Approve this release?' : 'Approve this update?', text: u.release ? `"${a.name}" goes live with its APK after the next store update. Everyone who pre-registered is emailed. The developer is notified and emailed.` : `The new version of "${a.name}" replaces the live one after the next store update. The developer is notified and emailed.`, ok: u.release ? 'Approve release' : 'Approve update' }))) return;
+  const now = Date.now(), up = {}, nm = u.name || a.name, rel = !!u.release;
   if (ok) {
     UP_FIELDS.forEach(f => { if (u[f] !== undefined) up[`apps/${aid}/${f}`] = u[f]; });
+    if (rel) { up[`apps/${aid}/status`] = 'live'; up[`apps/${aid}/preRelease`] = false; up[`apps/${aid}/releaseDate`] = null; up[`apps/${aid}/releasedAt`] = now; up[`apps/${aid}/timestamp`] = now; up[`apps/${aid}/approved`] = true; if (u.version) up[`apps/${aid}/versionHistory`] = [u.version]; }
     up[`apps/${aid}/updatedDate`] = new Date().toISOString().split('T')[0]; up[`apps/${aid}/updateReviewedAt`] = now; up[`apps/${aid}/updateResult`] = 'approved'; up[`appUpdates/${uid}/${aid}`] = null;
   } else { up[`appUpdates/${uid}/${aid}/status`] = 'rejected'; up[`appUpdates/${uid}/${aid}/rejectReason`] = reason.slice(0, 400); up[`appUpdates/${uid}/${aid}/reviewedAt`] = now; }
-  up[`notifications/${uid}/au_${aid.slice(-8)}_${now}`] = { type: 'appreview', appId: aid, appName: String(nm).slice(0, 100), text: ok ? `Your update for "${nm}" was approved and is now live on UptoZishu.` : `Your update for "${nm}" was not approved. The old version stays live. Please fix the issue and submit the update again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
+  up[`notifications/${uid}/au_${aid.slice(-8)}_${now}`] = { type: 'appreview', appId: aid, appName: String(nm).slice(0, 100), text: ok ? (rel ? `Your app "${nm}" was released and is now live on UptoZishu. Everyone who pre-registered is being emailed.` : `Your update for "${nm}" was approved and is now live on UptoZishu.`) : `Your update for "${nm}" was not approved. The old version stays live. Please fix the issue and submit the update again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
   try {
     await db.ref().update(up);
-    if (ok) { UP_FIELDS.forEach(f => { if (u[f] !== undefined) a[f] = u[f]; }); a.updateReviewedAt = now; a.updateResult = 'approved'; delete S.upd[uid][aid]; } else { u.status = 'rejected'; u.rejectReason = reason; u.reviewedAt = now; }
-    logAct(ok ? 'approve' : 'reject', (ok ? 'Approved update of "' : 'Rejected update of "') + nm + '"' + (u.version ? ' (' + u.version + ')' : ''), { appId: aid, appName: nm, icon: u.icon || a.icon, note: ok ? '' : reason });
+    if (ok) { UP_FIELDS.forEach(f => { if (u[f] !== undefined) a[f] = u[f]; }); if (rel) { a.status = 'live'; a.preRelease = false; a.releaseDate = null; } a.updateReviewedAt = now; a.updateResult = 'approved'; delete S.upd[uid][aid]; } else { u.status = 'rejected'; u.rejectReason = reason; u.reviewedAt = now; }
+    logAct(ok ? 'approve' : 'reject', (ok ? (rel ? 'Approved release of "' : 'Approved update of "') : (rel ? 'Rejected release of "' : 'Rejected update of "')) + nm + '"' + (u.version ? ' (' + u.version + ')' : ''), { appId: aid, appName: nm, icon: u.icon || a.icon, note: ok ? '' : reason });
     closeOv(); rerender(); sentAnim(ok ? 'Update approved' : 'Update rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
-    if (MAIL_ENDPOINT) { const m = await mailCall('updecision', aid); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
+    if (MAIL_ENDPOINT) { const m = await mailCall('updecision', aid); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); if (ok && rel) { const r = await mailCall('releasemail', aid); if (!r) toast('Could not email the pre-registered users', 'bad'); } }
   } catch (e) { fail(e); }
 }
 ACT.upApprove = d => decideUpdate(d.k, true);
