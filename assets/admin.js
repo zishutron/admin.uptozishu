@@ -728,10 +728,11 @@ ACT.adApprove = async d => {
   for (const [k, id] of targets) {
     const list = lists[k] || (lists[k] = sfList(k)), un = untils[k] || (untils[k] = Object.assign({}, (S.sf && S.sf[k + 'Until']) || {}));
     const base = list.includes(id) && +un[id] > now ? +un[id] : now, end = base + span;
-    if (!list.includes(id)) list.push(id); un[id] = end;
+    // a newly approved Sponsored or Featured app goes to the front of the list; a renewal keeps its place
+    if (!list.includes(id)) list.unshift(id); un[id] = end;
     up['storefront/' + k] = list; up['storefront/' + k + 'Until/' + id] = end;
     if (first === null) first = base; last = Math.max(last, end);
-    lines.push(`${S.apps[id].name} in ${AD_NAME[k]} until ${adDay(end)}` + (k === 'featured' && list.length > 8 ? ' (the Featured list has more than 8 apps, the store shows the first 8)' : ''));
+    lines.push(`${S.apps[id].name} in ${AD_NAME[k]} until ${adDay(end)}` + (k === 'featured' && list.length > 8 ? ' (the Featured list has more than 8 apps, the store shows the first 8, so the oldest ones drop out of view)' : ''));
   }
   if (wantsBadge) { const base = prof.verified && +prof.verifiedUntil > now ? +prof.verifiedUntil : now, end = base + (P === 'pro' ? span * 2 : span); up[`devprofiles/${c.uid}/verified`] = true; up[`devprofiles/${c.uid}/verifiedUntil`] = end; if (first === null) first = base; last = Math.max(last, end); lines.push(`${prof.name} gets the Verified badge until ${adDay(end)}` + (P === 'pro' ? ' (Pro gives 2 months of badge for each paid month)' : '')); }
   if (!(await ask({ title: 'Approve this ' + AD_NAME[P] + ' plan?', text: lines.join('. ') + '. Make sure ' + inr(c.amount) + ' with UTR ' + c.utr + ' is in your UPI account.', ok: 'Approve' }))) return;
