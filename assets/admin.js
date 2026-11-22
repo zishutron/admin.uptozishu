@@ -399,38 +399,46 @@ setInterval(() => { if (S.user && S.loaded && !document.hidden && route() === 't
 
 
 /* ---------- approvals (apps + profile changes) ---------- */
-const pendingApps = () => appList().filter(a => a.status === 'pending').sort((a, b) => (+a.submittedAt || +a.timestamp || 0) - (+b.submittedAt || +b.timestamp || 0));
+const pendingApps = () => appList().filter(a => a.status === 'pending' && !a.preRelease).sort((a, b) => (+a.submittedAt || +a.timestamp || 0) - (+b.submittedAt || +b.timestamp || 0));
 const pendingProfiles = () => Object.keys(S.pend || {}).map(uid => ({ uid, ...S.pend[uid] })).filter(p => p && typeof p === 'object' && p.status === 'pending').sort((a, b) => (+a.submittedAt || 0) - (+b.submittedAt || 0));
 const PF_LABEL = { name: 'Name', tagline: 'Tagline', type: 'Type', about: 'About', location: 'Location', founded: 'Started', email: 'Contact email', website: 'Website', github: 'GitHub', twitter: 'X', instagram: 'Instagram', youtube: 'YouTube', telegram: 'Telegram', linkedin: 'LinkedIn', discord: 'Discord', logo: 'Logo', cover: 'Cover' };
 UI.apTab = 'apps';
-const pendingUpdates = () => { const o = []; Object.keys(S.upd || {}).forEach(u => Object.keys(S.upd[u] || {}).forEach(a => { const v = S.upd[u][a]; if (v && typeof v === 'object' && v.status === 'pending' && S.apps[a]) o.push({ ...v, uid: u, appId: a }); })); return o.sort((x, y) => (+x.submittedAt || 0) - (+y.submittedAt || 0)); };
+const pendingPre = () => appList().filter(a => a.status === 'pending' && a.preRelease).map(a => ({ k: 'app', t: +a.submittedAt || +a.timestamp || 0, a })).concat(pendingAllUpdates().filter(u => u.release).map(u => ({ k: 'rel', t: +u.submittedAt || 0, u }))).sort((x, y) => x.t - y.t);
+const pendingUpdates = () => pendingAllUpdates().filter(u => !u.release);
+const pendingAllUpdates = () => { const o = []; Object.keys(S.upd || {}).forEach(u => Object.keys(S.upd[u] || {}).forEach(a => { const v = S.upd[u][a]; if (v && typeof v === 'object' && v.status === 'pending' && S.apps[a]) o.push({ ...v, uid: u, appId: a }); })); return o.sort((x, y) => (+x.submittedAt || 0) - (+y.submittedAt || 0)); };
 const UF_LABEL = { name: 'Name', category: 'Category', package: 'Package', version: 'Version', shortDescription: 'Short description', description: 'Description', downloadUrl: 'Download link', size: 'Size', tags: 'Tags', supportEmail: 'Support email', privacyPolicy: 'Privacy policy', website: 'Website', youtube: 'YouTube', minAndroid: 'Min Android', permissions: 'Permissions', whatsNew: "What's new", icon: 'Icon', banner: 'Featured image', screenshot: 'Screenshots' };
 const changedFields = (u, live) => Object.keys(UF_LABEL).filter(k => u[k] !== undefined && String(u[k] || '') !== String(live[k] || ''));
 const splitList = v => String(v || '').split(/[,\n]+/).map(x => x.trim()).filter(Boolean);
 const isImg = u => /^https?:\/\//i.test(u || '');
-function vApprovals() {
-  const pa = pendingApps(), pp = pendingProfiles(), pu = pendingUpdates();
-  const tabs = `<div class="chips" style="margin-bottom:16px"><button class="chip ${UI.apTab === 'apps' ? 'on' : ''}" data-act="apTab" data-t="apps">Apps · ${pa.length}</button><button class="chip ${UI.apTab === 'updates' ? 'on' : ''}" data-act="apTab" data-t="updates">App updates · ${pu.length}</button><button class="chip ${UI.apTab === 'profiles' ? 'on' : ''}" data-act="apTab" data-t="profiles">Profile changes · ${pp.length}</button></div>`;
-  if (UI.apTab === 'apps') {
-    if (!pa.length) return tabs + `<div class="empty card">${ico('check')}<b>No apps waiting</b>Apps that developers submit for review show up here.</div>`;
-    return tabs + '<div class="stack">' + pa.map(a => {
+function apCard(a) {
       const shots = String(a.screenshot || '').split(',').map(x => x.trim()).filter(x => /^https?:\/\//i.test(x)).slice(0, 4);
-      return `<div class="item"><div class="item-h"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><b>${esc(a.name || 'Untitled')} <span class="muted" style="font-weight:500">${esc(a.version || '')}</span></b><div class="meta">${esc(a.developerName || userName(a.developerUid) || 'Developer')} · ${esc(a.category || '')} · submitted ${ago(+a.submittedAt || +a.timestamp)}</div></div>${pill('warn', 'In review')}</div>
+      return `<div class="item"><div class="item-h"><img class="ico" src="${esc(a.icon || ICON)}" alt=""><div class="grow"><b>${esc(a.name || 'Untitled')} <span class="muted" style="font-weight:500">${esc(a.version || '')}</span></b><div class="meta">${esc(a.developerName || userName(a.developerUid) || 'Developer')} · ${esc(a.category || '')} · submitted ${ago(+a.submittedAt || +a.timestamp)}</div></div>${pill('warn', a.preRelease ? 'Pre-release in review' : 'In review')}</div>
       ${a.shortDescription ? `<p class="body">${esc(a.shortDescription)}</p>` : ''}
       <dl class="kv"><div><dt>Package</dt><dd>${esc(a.package || '—')}</dd></div><div><dt>Download link</dt><dd>${a.downloadUrl ? `<a href="${esc(a.downloadUrl)}" target="_blank" rel="noopener">${esc(hostOf(a.downloadUrl) || 'open')}</a>` : '—'}</dd></div><div><dt>Size</dt><dd>${esc(a.size || '—')}</dd></div><div><dt>Permissions</dt><dd>${esc(String(a.permissions || '').split(',').filter(Boolean).length)} declared</dd></div></dl>
       ${shots.length ? `<div class="shots">${shots.map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt=""></a>`).join('')}</div>` : ''}
       <div class="actions"><button class="btn sm" data-act="openReview" data-k="${esc(a.id)}">Full details</button><button class="btn sm good" data-act="apApprove" data-id="${esc(a.id)}">${ico('check')}Approve</button><button class="btn sm danger" data-act="apReject" data-id="${esc(a.id)}">${ico('x')}Reject</button></div></div>`;
-    }).join('') + '</div>';
-  }
-  if (UI.apTab === 'updates') {
-    if (!pu.length) return tabs + `<div class="empty card">${ico('check')}<b>No app updates waiting</b>When a developer updates a live app, the new version waits here. The old version stays on the store until you approve.</div>`;
-    return tabs + '<div class="stack">' + pu.map(u => {
+}
+function upCard(u) {
       const live = S.apps[u.appId], ch = changedFields(u, live), key = u.uid + '|' + u.appId;
-      return `<div class="item"><div class="item-h"><img class="ico" src="${esc(u.icon || live.icon || ICON)}" alt=""><div class="grow"><b>${esc(u.name || live.name)} <span class="muted" style="font-weight:500">${esc(live.version || '')} → ${esc(u.version || live.version || '')}</span></b><div class="meta">${esc(live.developerName || userName(u.uid) || 'Developer')} · submitted ${ago(+u.submittedAt)}</div></div>${pill('warn', 'Update in review')}</div>
+      return `<div class="item"><div class="item-h"><img class="ico" src="${esc(u.icon || live.icon || ICON)}" alt=""><div class="grow"><b>${esc(u.name || live.name)} <span class="muted" style="font-weight:500">${esc(live.version || '')} → ${esc(u.version || live.version || '')}</span></b><div class="meta">${esc(live.developerName || userName(u.uid) || 'Developer')} · submitted ${ago(+u.submittedAt)}</div></div>${pill('warn', u.release ? 'Release in review' : 'Update in review')}</div>
       ${u.whatsNew ? `<p class="body"><b>What's new:</b> ${esc(String(u.whatsNew).slice(0, 300))}</p>` : ''}
       <div class="chips" style="margin:8px 0 12px">${ch.length ? ch.map(k => pill('nd', UF_LABEL[k])).join('') : '<span class="muted">No visible changes</span>'}</div>
       <div class="actions"><button class="btn sm" data-act="openReview" data-k="${esc(key)}" data-u="1">Review changes</button><button class="btn sm good" data-act="upApprove" data-k="${esc(key)}">${ico('check')}Approve</button><button class="btn sm danger" data-act="upReject" data-k="${esc(key)}">${ico('x')}Reject</button></div></div>`;
-    }).join('') + '</div>';
+}
+function vApprovals() {
+  const pa = pendingApps(), pp = pendingProfiles(), pu = pendingUpdates(), pr = pendingPre();
+  const tabs = `<div class="chips" style="margin-bottom:16px"><button class="chip ${UI.apTab === 'apps' ? 'on' : ''}" data-act="apTab" data-t="apps">Apps · ${pa.length}</button><button class="chip ${UI.apTab === 'pre' ? 'on' : ''}" data-act="apTab" data-t="pre">Pre-release · ${pr.length}</button><button class="chip ${UI.apTab === 'updates' ? 'on' : ''}" data-act="apTab" data-t="updates">App updates · ${pu.length}</button><button class="chip ${UI.apTab === 'profiles' ? 'on' : ''}" data-act="apTab" data-t="profiles">Profile changes · ${pp.length}</button></div>`;
+  if (UI.apTab === 'apps') {
+    if (!pa.length) return tabs + `<div class="empty card">${ico('check')}<b>No apps waiting</b>Apps that developers submit for review show up here.</div>`;
+    return tabs + '<div class="stack">' + pa.map(apCard).join('') + '</div>';
+  }
+  if (UI.apTab === 'pre') {
+    if (!pr.length) return tabs + `<div class="empty card">${ico('check')}<b>No pre-release waiting</b>Coming soon listings and release requests from developers show up here.</div>`;
+    return tabs + '<div class="stack">' + pr.map(x => x.k === 'app' ? apCard(x.a) : upCard(x.u)).join('') + '</div>';
+  }
+  if (UI.apTab === 'updates') {
+    if (!pu.length) return tabs + `<div class="empty card">${ico('check')}<b>No app updates waiting</b>When a developer updates a live app, the new version waits here. The old version stays on the store until you approve.</div>`;
+    return tabs + '<div class="stack">' + pu.map(upCard).join('') + '</div>';
   }
   if (!pp.length) return tabs + `<div class="empty card">${ico('check')}<b>No profile changes waiting</b>Edits to developer profiles show up here for approval.</div>`;
   return tabs + '<div class="stack">' + pp.map(p => {
@@ -532,20 +540,20 @@ async function decideUpdate(key, ok) {
   if (ok && a.status === 'suspended') { toast('This app is suspended. Restore it first.', 'bad'); return; }
   let reason = '';
   if (!ok) { reason = await ask({ title: 'Reject this update?', text: 'The live version stays on the store. The developer is notified and emailed with your reason, and can fix the update and submit it again.', input: 'Reason shown to the developer', area: true, required: true, ok: 'Reject update' }); if (!reason) return; }
-  else if (!(await ask({ title: u.release ? 'Approve this release?' : 'Approve this update?', text: u.release ? `"${a.name}" goes live with its APK after the next store update. Everyone who pre-registered is emailed. The developer is notified and emailed.` : `The new version of "${a.name}" replaces the live one after the next store update. The developer is notified and emailed.`, ok: u.release ? 'Approve release' : 'Approve update' }))) return;
+  else if (!(await ask({ title: u.release ? 'Approve this release?' : 'Approve this update?', text: u.release ? `"${a.name}" goes live with its APK after the next store update. Everyone who pre-registered gets a notification in the UptoZishu app. The developer is notified and emailed.` : `The new version of "${a.name}" replaces the live one after the next store update. The developer is notified and emailed.`, ok: u.release ? 'Approve release' : 'Approve update' }))) return;
   const now = Date.now(), up = {}, nm = u.name || a.name, rel = !!u.release;
   if (ok) {
     UP_FIELDS.forEach(f => { if (u[f] !== undefined) up[`apps/${aid}/${f}`] = u[f]; });
     if (rel) { up[`apps/${aid}/status`] = 'live'; up[`apps/${aid}/preRelease`] = false; up[`apps/${aid}/releaseDate`] = null; up[`apps/${aid}/releasedAt`] = now; up[`apps/${aid}/timestamp`] = now; up[`apps/${aid}/approved`] = true; if (u.version) up[`apps/${aid}/versionHistory`] = [u.version]; }
     up[`apps/${aid}/updatedDate`] = new Date().toISOString().split('T')[0]; up[`apps/${aid}/updateReviewedAt`] = now; up[`apps/${aid}/updateResult`] = 'approved'; up[`appUpdates/${uid}/${aid}`] = null;
   } else { up[`appUpdates/${uid}/${aid}/status`] = 'rejected'; up[`appUpdates/${uid}/${aid}/rejectReason`] = reason.slice(0, 400); up[`appUpdates/${uid}/${aid}/reviewedAt`] = now; }
-  up[`notifications/${uid}/au_${aid.slice(-8)}_${now}`] = { type: 'appreview', appId: aid, appName: String(nm).slice(0, 100), text: ok ? (rel ? `Your app "${nm}" was released and is now live on UptoZishu. Everyone who pre-registered is being emailed.` : `Your update for "${nm}" was approved and is now live on UptoZishu.`) : `Your update for "${nm}" was not approved. The old version stays live. Please fix the issue and submit the update again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
+  up[`notifications/${uid}/au_${aid.slice(-8)}_${now}`] = { type: 'appreview', appId: aid, appName: String(nm).slice(0, 100), text: ok ? (rel ? `Your app "${nm}" was released and is now live on UptoZishu. Everyone who pre-registered is being notified in the UptoZishu app.` : `Your update for "${nm}" was approved and is now live on UptoZishu.`) : `Your update for "${nm}" was not approved. The old version stays live. Please fix the issue and submit the update again.`, ...(ok ? {} : { reason: reason.slice(0, 400) }), timestamp: now, read: false };
   try {
     await db.ref().update(up);
     if (ok) { UP_FIELDS.forEach(f => { if (u[f] !== undefined) a[f] = u[f]; }); if (rel) { a.status = 'live'; a.preRelease = false; a.releaseDate = null; } a.updateReviewedAt = now; a.updateResult = 'approved'; delete S.upd[uid][aid]; } else { u.status = 'rejected'; u.rejectReason = reason; u.reviewedAt = now; }
     logAct(ok ? 'approve' : 'reject', (ok ? (rel ? 'Approved release of "' : 'Approved update of "') : (rel ? 'Rejected release of "' : 'Rejected update of "')) + nm + '"' + (u.version ? ' (' + u.version + ')' : ''), { appId: aid, appName: nm, icon: u.icon || a.icon, note: ok ? '' : reason });
     closeOv(); rerender(); sentAnim(ok ? 'Update approved' : 'Update rejected', MAIL_ENDPOINT ? 'Developer notified in the console and by email' : 'Developer notified in the console');
-    if (MAIL_ENDPOINT) { const m = await mailCall('updecision', aid); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); if (ok && rel) { const r = await mailCall('releasemail', aid); if (!r) toast('Could not email the pre-registered users', 'bad'); } }
+    if (MAIL_ENDPOINT) { const m = await mailCall('updecision', aid); if (!m) toast('Email could not be sent, notification was delivered', 'bad'); }
   } catch (e) { fail(e); }
 }
 ACT.upApprove = d => decideUpdate(d.k, true);
@@ -800,7 +808,7 @@ const VIEWS = { '': vOverview, apps: vApps, reviews: vReviews, reports: vReports
 function route() { return (location.hash.replace(/^#\/?/, '').split('/')[0]) || ''; }
 function routeId() { return decodeURIComponent(location.hash.replace(/^#\/?/, '').split('/')[1] || ''); }
 function buildNav() {
-  const c = { approvals: pendingApps().length + pendingProfiles().length + pendingUpdates().length, reports: reportList().length, feedback: fbList().filter(f => f.status === 'new').length, claims: pendingClaims().length, ads: adList().filter(c => c.status === 'pending').length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
+  const c = { approvals: pendingApps().length + pendingProfiles().length + pendingUpdates().length + pendingPre().length, reports: reportList().length, feedback: fbList().filter(f => f.status === 'new').length, claims: pendingClaims().length, ads: adList().filter(c => c.status === 'pending').length, tickets: tkList().filter(t => t.status !== 'closed' && t.lastBy !== 'admin').length };
   $('#nav').innerHTML = NAV.map(n => n[0] === 'h' ? `<div class="nav-h">${n[1]}</div>` : `<a class="nav-a ${route() === n[0] ? 'on' : ''}" href="#/${n[0]}">${ico(n[2])}<span>${n[1]}</span>${c[n[0]] ? `<span class="cnt">${c[n[0]]}</span>` : ''}</a>`).join('');
 }
 function rerender() {
